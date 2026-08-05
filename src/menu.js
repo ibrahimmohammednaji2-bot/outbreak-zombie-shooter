@@ -61,7 +61,7 @@ export function createLobby({ onStart, onApply }) {
   const stored = loadLoadouts();
 
   const s = {
-    tab: "closet",
+    panel: null, // null | "closet" | "settings" | "controls"
     mode: prefs.mode,
     difficulty: prefs.difficulty,
     mapId: prefs.mapId ?? mapsFor(prefs.mode)[0].id,
@@ -87,16 +87,10 @@ export function createLobby({ onStart, onApply }) {
   }
 
   // ── top bar ────────────────────────────────────────────────────
-  const TABS = [
-    { id: "closet", label: "WEAPON CLOSET" },
-    { id: "mode", label: "MODE" },
-    { id: "controls", label: "CONTROLS" },
-  ];
-
   function renderTop() {
-    topNav.innerHTML = TABS.map(
-      (t) => `<button class="tab ${t.id === s.tab ? "on" : ""}" data-tab="${t.id}">${t.label}</button>`,
-    ).join("");
+    topNav.innerHTML = `<button class="tab ${
+      s.panel === "controls" ? "on" : ""
+    }" data-panel="controls">CONTROLS</button>`;
     const st = stats.read();
     document.getElementById("stat-kills").innerHTML = `${st.kills} <i>KILLS</i>`;
     document.getElementById("stat-best").innerHTML =
@@ -309,27 +303,43 @@ export function createLobby({ onStart, onApply }) {
     </div>`;
 
   // ── right column ───────────────────────────────────────────────
+  /* Bottom-right stack: what you are about to play, then the button that plays it. */
   function renderRight() {
     const map = mapById(s.mapId);
     const diff = DIFFICULTIES.find((d) => d.id === s.difficulty);
     const lo = current();
 
     right.innerHTML = `
-      <button class="mode-card-lg" data-tab="mode">
-        <span class="mcl-art ${s.mode}">${s.mode === "zombies" ? "ZOMBIES" : "DEATHMATCH"}</span>
-        <span class="mcl-foot">${map.name.toUpperCase()} · ${diff.label}</span>
+      <button class="stack-btn ${s.panel === "closet" ? "on" : ""}" data-panel="closet">
+        <span class="sb-title">WEAPON CLOSET</span>
+        <span class="sb-sub">${s.selected + 1} ${lo.name} · ${
+          lo.weapons[0] ? byId(lo.weapons[0].id).name : "—"
+        }</span>
       </button>
-      <div class="side-line"><span>LOADOUT</span><b>${s.selected + 1} ${lo.name}</b></div>
-      <div class="side-line"><span>PRIMARY</span><b>${
-        lo.weapons[0] ? byId(lo.weapons[0].id).name : "—"
-      }</b></div>
-      <button class="play-btn" data-play="1">${s.inGame ? "APPLY & RESUME" : "PLAY"}</button>`;
+      <button class="stack-btn ${s.panel === "settings" ? "on" : ""}" data-panel="settings">
+        <span class="sb-title">MODE · MAP · DIFFICULTY</span>
+        <span class="sb-sub">${
+          s.mode === "zombies" ? "Zombies" : "Multiplayer"
+        } · ${map.name} · ${diff.label}</span>
+      </button>
+      <button class="play-btn" data-play="1">${s.inGame ? "APPLY & RESUME" : "START GAME"}</button>`;
   }
 
   function render() {
     renderTop();
-    left.innerHTML =
-      s.tab === "closet" ? closetHtml() : s.tab === "mode" ? modeHtml() : controlsHtml();
+    if (s.panel) {
+      left.classList.remove("hidden");
+      left.innerHTML =
+        `<button class="panel-close" data-close="1">✕</button>` +
+        (s.panel === "closet"
+          ? closetHtml()
+          : s.panel === "settings"
+            ? modeHtml()
+            : controlsHtml());
+    } else {
+      left.classList.add("hidden");
+      left.innerHTML = "";
+    }
     renderRight();
   }
 
@@ -340,7 +350,8 @@ export function createLobby({ onStart, onApply }) {
     const d = el.dataset;
     let dirty = true;
 
-    if (d.tab) s.tab = d.tab;
+    if (d.panel) s.panel = s.panel === d.panel ? null : d.panel;
+    else if (d.close) s.panel = null;
     else if (d.loadout !== undefined) {
       s.selected = Number(d.loadout);
       s.editSlot = 0;
@@ -409,7 +420,7 @@ export function createLobby({ onStart, onApply }) {
   return {
     open({ inGame = false } = {}) {
       s.inGame = inGame;
-      s.tab = inGame ? "closet" : s.tab;
+      s.panel = inGame ? "closet" : null;
       render();
       root.classList.remove("hidden");
     },

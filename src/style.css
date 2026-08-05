@@ -675,6 +675,41 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
 .equip-block { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 11px; margin-top: 6px; }
 
+/* bottom-right button stack */
+#lobby-left { position: relative; }
+
+.panel-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  padding: 4px 10px;
+  font-size: 13px;
+  letter-spacing: 0;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stack-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 15px;
+  border-radius: 7px;
+  letter-spacing: normal;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--ink);
+  background: rgba(6, 12, 22, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.stack-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: var(--ink); }
+.stack-btn.on { border-color: var(--accent); background: rgba(127, 209, 185, 0.14); }
+
+.sb-title { font-size: 11px; letter-spacing: 2.5px; color: var(--accent); }
+.sb-sub { font-size: 11px; opacity: 0.55; font-weight: 400; }
+
 /* right column cards */
 .mode-card-lg {
   padding: 0;

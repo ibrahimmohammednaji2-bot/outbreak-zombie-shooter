@@ -81,10 +81,29 @@ const ui = {
 
 // ── renderer ─────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas: $("scene"), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+
+/*
+ * A browser only allows a handful of live WebGL contexts. Open the game in
+ * several tabs and the oldest ones have their context taken away — they then
+ * render solid black with no error at all. Say so instead of dying quietly.
+ */
+$("scene").addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+  fatal(
+    "WebGL context lost",
+    new Error(
+      "The browser took this tab's 3D context away — usually because the game " +
+        "is open in several tabs at once. Close the other tabs and reload.",
+    ),
+  );
+});
+$("scene").addEventListener("webglcontextrestored", () => {
+  location.reload();
+});
 
 const scene = new THREE.Scene();
 const BASE_FOV = 76;
@@ -159,8 +178,10 @@ function humanoid(skinHex, clothHex) {
   const armR = part(0.16, 0.72, 0.16, 0.4, 1.25, -0.22, skin);
   const legL = part(0.2, 0.78, 0.2, -0.17, 0.39, 0, cloth);
   const legR = part(0.2, 0.78, 0.2, 0.17, 0.39, 0, cloth);
+  // Only the bulk casts a shadow. Limbs tripled the shadow pass for detail
+  // nobody can see at night, and thirty zombies made that expensive.
   for (const m of [torso, head, armL, armR, legL, legR]) {
-    m.castShadow = true;
+    m.castShadow = m === torso || m === head;
     group.add(m);
   }
   return { group, torso, head, armL, armR, legL, legR, skin, cloth };
@@ -225,7 +246,7 @@ function buildMap(def) {
   const moon = new THREE.DirectionalLight(def.moon, def.moonIntensity);
   moon.position.set(def.half * 0.8, def.half * 1.6, -def.half * 0.6);
   moon.castShadow = true;
-  moon.shadow.mapSize.set(2048, 2048);
+  moon.shadow.mapSize.set(1024, 1024);
   const s = def.half + 12;
   Object.assign(moon.shadow.camera, { left: -s, right: s, top: s, bottom: -s, far: s * 4 });
   moon.shadow.camera.updateProjectionMatrix();
