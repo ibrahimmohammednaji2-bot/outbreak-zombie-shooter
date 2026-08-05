@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Outbreak — Zombie Shooter Prototype</title>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <!-- red flash when the player takes damage -->
+    <div id="vignette"></div>
+
+    <div id="hud" class="hidden">
+      <div id="crosshair"><span></span><span></span><span></span><span></span></div>
+
+      <div id="hud-left">
+        <div id="health-wrap">
+          <div id="health-bar"></div>
+        </div>
+        <div id="health-text">100</div>
+      </div>
+
+      <div id="hud-right">
+        <div id="weapon-name">Pistol</div>
+        <div id="ammo"><span id="mag">12</span><span id="reserve">/ 90</span></div>
+        <div id="reloading" class="hidden">RELOADING</div>
+      </div>
+
+      <div id="hud-top">
+        <div id="wave-label">WAVE <span id="wave">1</span></div>
+        <div id="kills-label"><span id="kills">0</span> KILLS</div>
+        <div id="remaining-label"><span id="remaining">0</span> LEFT</div>
+      </div>
+
+      <div id="loadout"></div>
+      <div id="toast"></div>
+      <div id="banner"></div>
+    </div>
+
+    <div id="start" class="overlay">
+      <div class="panel">
+        <h1>OUTBREAK</h1>
+        <p class="sub">3D zombie shooter — playable prototype</p>
+        <ul class="keys">
+          <li><b>W A S D</b> move</li>
+          <li><b>Mouse</b> look · <b>Click</b> fire</li>
+          <li><b>Shift</b> sprint · <b>Space</b> jump</li>
+          <li><b>R</b> reload · <b>1 2 3</b> weapons</li>
+          <li><b>Esc</b> pause</li>
+        </ul>
+        <button id="start-btn">CLICK TO PLAY</button>
+        <p class="note">
+          Survive the waves. Kills unlock better weapons — the rifle at 15, the
+          shotgun at 40.
+        </p>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      <div class="panel">
+        <h1>PAUSED</h1>
+        <button id="resume-btn">RESUME</button>
+      </div>
+    </div>
+
+    <div id="dead" class="overlay hidden">
+      <div class="panel">
+        <h1 class="red">YOU DIED</h1>
+        <p class="sub">
+          Wave <b id="dead-wave">1</b> · <b id="dead-kills">0</b> kills
+        </p>
+        <button id="retry-btn">TRY AGAIN</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
