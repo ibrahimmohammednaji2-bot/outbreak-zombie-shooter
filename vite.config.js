@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  // GitHub Pages serves a project site from /<repo>/
-  base: "/outbreak-zombie-shooter/",
+  // GitHub Pages serves a project site from /<repo>/; Vercel and everything
+  // else serve from the root. The workflow sets GITHUB_PAGES=true.
+  base: process.env.GITHUB_PAGES ? "/outbreak-zombie-shooter/" : "/",
 
   // The preview server rejects hostnames it does not recognise, which blocks
   // tunnels that hand out a random subdomain. Allow them through.
