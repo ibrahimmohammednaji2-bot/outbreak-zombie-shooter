@@ -700,14 +700,61 @@ const cone = (x, z, rad, h, c, y = 0, clip = false) => ({
   t: "cone", x, z, rad, h, c, y, clip,
 });
 
-/** A tree: trunk plus two stacked canopies, neither of which blocks you. */
-function tree(x, z, scale = 1) {
+// Real woodland is not one green: canopies, trunks and stone all vary, and
+// nothing stands perfectly upright.
+const CANOPY = [0x2f4a2b, 0x375733, 0x27401f, 0x3d5c34, 0x33502c, 0x2a4726];
+const TRUNK = [0x3d2f22, 0x463527, 0x33281d, 0x4a3a2a];
+const ROCK = [0x5f6167, 0x6b6d72, 0x54565b, 0x74766f, 0x646259];
+const pickOf = (arr, rnd) => arr[Math.min(arr.length - 1, (rnd() * arr.length) | 0)];
+
+/** A tree: leaning trunk, three stacked canopies, none of it colliding overhead. */
+function tree(x, z, scale = 1, rnd = Math.random) {
   const trunkH = 3.4 * scale;
+  const lean = (rnd() - 0.5) * 0.16;
+  const near = pickOf(CANOPY, rnd);
+  const far = pickOf(CANOPY, rnd);
   return [
-    cyl(x, z, 0.24 * scale, 0.4 * scale, trunkH, 0x3d2f22),
-    cone(x, z, 2.3 * scale, 3.6 * scale, 0x2f4a2b, trunkH * 0.72),
-    cone(x, z, 1.7 * scale, 2.9 * scale, 0x375733, trunkH * 1.32),
+    { ...cyl(x, z, 0.22 * scale, 0.44 * scale, trunkH, pickOf(TRUNK, rnd)), tilt: lean },
+    { ...cone(x, z, 2.4 * scale, 3.5 * scale, near, trunkH * 0.66), tilt: lean },
+    { ...cone(x, z, 1.8 * scale, 2.9 * scale, far, trunkH * 1.26), tilt: lean },
+    { ...cone(x, z, 1.1 * scale, 2.2 * scale, near, trunkH * 1.86), tilt: lean },
   ];
+}
+
+/** A dead one — bare trunk, broken limbs, no canopy. */
+function deadTree(x, z, scale = 1, rnd = Math.random) {
+  const h = 4.2 * scale;
+  return [
+    { ...cyl(x, z, 0.14 * scale, 0.4 * scale, h, 0x3a3028), tilt: (rnd() - 0.5) * 0.3 },
+    { ...box(x, z, 2.2 * scale, 0.16, 0.16, 0x3a3028, rnd() * 3, h * 0.62), tilt: 0.4, clip: false },
+    { ...box(x, z, 1.6 * scale, 0.14, 0.14, 0x3a3028, rnd() * 3, h * 0.82), tilt: -0.5, clip: false },
+  ];
+}
+
+/** A rock cluster: a few angled slabs of stone with moss on the crown. */
+function rocks(x, z, scale, rnd) {
+  const out = [];
+  const count = 2 + ((rnd() * 4) | 0);
+  for (let i = 0; i < count; i++) {
+    const a = rnd() * Math.PI * 2;
+    const d = rnd() * 1.7 * scale;
+    const s = (0.6 + rnd() * 1.2) * scale;
+    out.push({
+      ...box(
+        x + Math.cos(a) * d,
+        z + Math.sin(a) * d,
+        s * 1.5,
+        s * (0.45 + rnd() * 0.85),
+        s * 1.2,
+        pickOf(ROCK, rnd),
+        rnd() * 3,
+      ),
+      tilt: (rnd() - 0.5) * 0.22,
+    });
+  }
+  // moss catches the light on top and breaks up the grey
+  out.push(box(x, z, scale * 1.4, 0.12, scale * 1.2, 0x3f5a34, rnd() * 3, scale * 0.7));
+  return out;
 }
 
 const rngFrom = (seed) => {
@@ -1094,17 +1141,60 @@ const MAPS = [
     fires: [[-22, -20], [24, 18], [0, 30], [-26, 22]],
     props: [
       ...house(0, 0, 91, forestBoxes),
-      // woodland, kept clear of the cabin and its approach
-      ...scatter(150, 5, (rnd) => {
+
+      // Woodland grows in clumps with clearings between, not on a grid.
+      // Each cluster is a handful of trees of varying size and shade.
+      ...scatter(46, 5, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 27 + rnd() * 42;
+        const cx = Math.cos(a) * d;
+        const cz = Math.sin(a) * d;
+        const out = [];
+        const n = 4 + ((rnd() * 6) | 0);
+        for (let i = 0; i < n; i++) {
+          const ta = rnd() * Math.PI * 2;
+          const td = rnd() * 8;
+          out.push(
+            ...tree(cx + Math.cos(ta) * td, cz + Math.sin(ta) * td, 0.7 + rnd() * 0.95, rnd),
+          );
+        }
+        return out;
+      }).flat(),
+
+      // stragglers between the clumps, so no clearing looks cut out
+      ...scatter(60, 311, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 24 + rnd() * 45;
+        return tree(Math.cos(a) * d, Math.sin(a) * d, 0.6 + rnd() * 0.7, rnd);
+      }).flat(),
+
+      // dead ones, bare and leaning
+      ...scatter(22, 733, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 26 + rnd() * 42;
-        return tree(Math.cos(a) * d, Math.sin(a) * d, 0.75 + rnd() * 0.8);
+        return deadTree(Math.cos(a) * d, Math.sin(a) * d, 0.8 + rnd() * 0.7, rnd);
       }).flat(),
-      ...scatter(12, 149, (rnd) => {
+
+      // rock clusters, from boulder to outcrop
+      ...scatter(38, 149, (rnd) => {
         const a = rnd() * Math.PI * 2;
-        const d = 16 + rnd() * 28;
-        const s = 1.2 + rnd() * 1.1;
-        return box(Math.cos(a) * d, Math.sin(a) * d, s, s * 0.8, s, 0x50544e, rnd() * 3);
+        const d = 20 + rnd() * 48;
+        return rocks(Math.cos(a) * d, Math.sin(a) * d, 0.8 + rnd() * 1.6, rnd);
+      }).flat(),
+
+      // loose stones underfoot — low enough to walk straight over
+      ...scatter(70, 907, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 18 + rnd() * 50;
+        const s = 0.4 + rnd() * 0.7;
+        return box(Math.cos(a) * d, Math.sin(a) * d, s, 0.28, s * 0.8, pickOf(ROCK, rnd), rnd() * 3);
+      }),
+
+      // fallen branches
+      ...scatter(40, 613, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 22 + rnd() * 44;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 2 + rnd() * 3, 0.22, 0.24, 0x3a3028, rnd() * 3);
       }),
     ],
   },
