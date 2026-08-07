@@ -77,7 +77,6 @@ let HALF = 31; // arena half-width — set by the chosen map
 const WALKER_SPEED = 1.75;
 const RUN_SPEED = 7.6;
 const WALK_SPEED = WALKER_SPEED + 0.25; // 2.0 — barely faster than a shambler
-const RUNNER_SPEED = RUN_SPEED - 0.5; // 7.1 — a sprint only just outpaces it
 const CROUCH_SPEED = 1; // sitting low: steady aim, no escape
 const CROUCH_EYE = 0.95;
 const DOUBLE_TAP = 0.32; // seconds between W presses that counts as a run
@@ -2017,14 +2016,35 @@ const ownedPerks = new Set();
 
 const hasPerk = (id) => ownedPerks.has(id);
 
-/** Stand them at the four corners of the arena, well apart. */
+/*
+ * Somewhere clear to stand a machine. Dropping one on a fixed mark buries it
+ * in a tree or inside a wall on half the maps, so walk out along the spoke
+ * until there is room for it and for whoever comes to drink from it.
+ */
+const spotScratch = new THREE.Vector3();
+function clearSpot(angle) {
+  for (let r = HALF * 0.5; r > 6; r -= 2.5) {
+    const x = Math.cos(angle) * r;
+    const z = Math.sin(angle) * r;
+    spotScratch.set(x, 0, z);
+    let blocked = false;
+    for (const o of obstacles) {
+      if (o.top <= STEP) continue; // scenery you walk over
+      if (overlapsBox(spotScratch, 1.6, o)) { blocked = true; break; }
+    }
+    if (!blocked) return [x, z];
+  }
+  // nowhere is clear — take the spoke's end and let pushOut sort the player out
+  return [Math.cos(angle) * HALF * 0.5, Math.sin(angle) * HALF * 0.5];
+}
+
+/** Stand them around the arena, well apart, on ground you can reach. */
 function placePerkMachines() {
   perkMachines.length = 0;
-  const r = HALF * 0.5;
+  if (game.dm) return; // a free-for-all has no points and no perks
   PERKS_FOR_SALE.forEach((perk, i) => {
     const a = (i / PERKS_FOR_SALE.length) * Math.PI * 2 + 0.6;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
+    const [x, z] = clearSpot(a);
 
     const body = new THREE.Mesh(
       UNIT_BOX,
@@ -4169,6 +4189,16 @@ function resetGame() {
   player.vy = 0;
   player.hp = 100;
   player.lastHit = 0;
+  player.slow = 0;
+  player.blind = 0;
+  ui.flash.style.opacity = "0"; // a flashbang that went off as you died
+
+  // These hold the game.time they expire at, and the clock is about to go back
+  // to zero — leave them and the new game starts with the last one's power-ups
+  // and a decoy still pulling the horde to a corner of the old map.
+  bonus.points = 0;
+  bonus.instakill = 0;
+  lure.until = 0;
 
   for (const vm of Object.values(viewmodels)) vm.visible = false;
   Object.assign(game, {
@@ -5411,3 +5441,31 @@ function reviveWithToken() {
 $("revive-btn").addEventListener("click", reviveWithToken);
 
 renderShopButton();
+
+/*
+ * A window on the running game, for the smoke test in test/ — which drives a
+ * real browser and needs to see whether waves actually advance. Development
+ * only; the built bundle drops the whole block.
+ */
+if (import.meta.env.DEV) {
+  window.__probe = {
+    game,
+    player,
+    zombies,
+    perkMachines,
+    ownedPerks,
+    liveCount,
+    buyPerk,
+    PERKS_FOR_SALE,
+    startWave,
+    spawnZombie,
+    killZombie,
+    resetGame,
+    MAPS,
+    WEAPONS,
+    fire,
+    activatePower,
+    startDeathmatch,
+    toLobby,
+  };
+}
