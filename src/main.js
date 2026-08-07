@@ -1532,6 +1532,21 @@ function overlapsBox(pos, radius, o) {
   return Math.abs(lx) < o.hw + radius && Math.abs(lz) < o.hd + radius;
 }
 
+/**
+ * Lowest solid surface above the feet — a ceiling. Without this, anything
+ * moving upward passes straight through an upper floor, which is how zombies
+ * were arriving inside the room above you.
+ */
+function ceilingAt(pos, radius, feetY, headroom = 1.75) {
+  let low = Infinity;
+  for (const o of near(pos.x, pos.z)) {
+    if (o.bottom < feetY + 0.1) continue; // at or below us, not overhead
+    if (o.bottom < low && overlapsBox(pos, radius * 0.6, o)) low = o.bottom;
+  }
+  void headroom;
+  return low;
+}
+
 /** Highest surface at or below the feet. 0 is the floor. */
 function groundHeightAt(pos, radius, feetY = 0) {
   let top = 0;
@@ -1730,12 +1745,33 @@ function piece(parent, w, h, d, x, y, z, mat, shadow = false) {
  * reaching forward.
  */
 function buildZombie(kind) {
-  const skin = new THREE.MeshLambertMaterial({ color: pick(ZOMBIE_TONES), transparent: true });
-  const shirt = new THREE.MeshLambertMaterial({
-    color: pick(SHIRTS),
+  // the roster reads at a glance: ninjas in black, bosses in their own colours
+  const LOOK = {
+    finisher: { skin: 0x6f7a68, shirt: 0x14161a, pants: 0x0d0f12 },
+    fat:      { skin: 0x8aa06b, shirt: 0x9a8f6a, pants: 0x4a4030 },
+    bigdude:  { skin: 0x6f8f5c, shirt: 0x5a4a3a, pants: 0x33291f },
+    reviver:  { skin: 0x93a173, shirt: 0x6a3f5a, pants: 0x38243a },
+    marksman: { skin: 0x74855f, shirt: 0x3f4a34, pants: 0x2e3626 },
+    hopper:   { skin: 0x7f9b63, shirt: 0x4a5a3a, pants: 0x2f3a26 },
+  };
+  const look = LOOK[kind];
+
+  const skin = new THREE.MeshLambertMaterial({
+    color: look?.skin ?? pick(ZOMBIE_TONES),
     transparent: true,
+    // the Marksman blends into the treeline until it fires
+    opacity: kind === "marksman" ? 0.45 : 1,
   });
-  const pants = new THREE.MeshLambertMaterial({ color: pick(PANTS), transparent: true });
+  const shirt = new THREE.MeshLambertMaterial({
+    color: look?.shirt ?? pick(SHIRTS),
+    transparent: true,
+    opacity: kind === "marksman" ? 0.45 : 1,
+  });
+  const pants = new THREE.MeshLambertMaterial({
+    color: look?.pants ?? pick(PANTS),
+    transparent: true,
+    opacity: kind === "marksman" ? 0.45 : 1,
+  });
   const blood = new THREE.MeshLambertMaterial({ color: 0x6e1a16, transparent: true });
   const dark = new THREE.MeshLambertMaterial({ color: 0x141a10, transparent: true });
   const teeth = new THREE.MeshLambertMaterial({ color: 0xd8d2bc, transparent: true });
@@ -1828,11 +1864,41 @@ function buildZombie(kind) {
   };
 }
 
+/*
+ * The roster. Speeds and health are absolute; the wave scaling multiplies
+ * them afterwards. `chance` is the flat roll per spawn — what is left over
+ * is an ordinary walker.
+ */
+const ZOMBIE_TYPES = {
+  fat:      { chance: 0.10,  hp: 200, speed: 0.88, dmg: 33,  scale: 1.4,  label: "a fat one" },
+  runner:   { chance: 0.05,  hp: 60,  speed: 6,    dmg: 33,  scale: 0.92, label: "a runner" },
+  hopper:   { chance: 0.025, hp: 70,  speed: 2.2,  dmg: 33,  scale: 0.9,  label: "a hopper" },
+  finisher: { chance: 0.025, hp: 10,  speed: 3,    dmg: 100, scale: 0.95, label: "a finisher" },
+  bigdude:  { chance: 0.01,  hp: 300, speed: 1.75, dmg: 66,  scale: 2,    label: "the Big Dude", boss: true },
+  reviver:  { chance: 0.01,  hp: 100, speed: 1.75, dmg: 33,  scale: 1,    label: "a Reviver", boss: true },
+  marksman: { chance: 0.01,  hp: 120, speed: 1.6,  dmg: 70,  scale: 1,    label: "the Marksman", boss: true, sniper: true },
+  walker:   { chance: 0,     hp: 100, speed: 1.75, dmg: 33,  scale: 1,    label: "a walker" },
+};
+
+function rollKind() {
+  const r = Math.random();
+  let acc = 0;
+  for (const [id, t] of Object.entries(ZOMBIE_TYPES)) {
+    if (!t.chance) continue;
+    acc += t.chance;
+    if (r < acc) return id;
+  }
+  return "walker";
+}
+
+const CORPSE_TIME = 60; // how long a body lies there before it fades
+const REVIVE_TIME = 5; // a Reviver gets back up this long after falling
 function spawnZombie(wave) {
-  const kind = wave >= 4 && Math.random() < 0.22 ? "runner" : "walker";
+  const kind = wave >= 3 ? rollKind() : "walker";
+  const type = ZOMBIE_TYPES[kind];
 
   const model = buildZombie(kind);
-  const scale = kind === "runner" ? 0.92 : 1;
+  const scale = type.scale;
   model.group.scale.setScalar(scale);
 
   // spawn on the perimeter, clear of the player
@@ -1860,10 +1926,7 @@ function spawnZombie(wave) {
   const hpScale = 1 + 0.15 * (wave - 1);
   const dmgScale = 1 + 0.09 * (wave - 1);
   const D = game.diff;
-  const base =
-    kind === "runner"
-      ? { hp: 60, speed: RUNNER_SPEED, dmg: ZOMBIE_DAMAGE }
-      : { hp: 100, speed: WALKER_SPEED, dmg: ZOMBIE_DAMAGE };
+  const base = { hp: type.hp, speed: type.speed, dmg: type.dmg };
 
   const z0 = {
     kind,
@@ -1900,6 +1963,14 @@ function spawnZombie(wave) {
   hitboxes.push(model.torso, model.head);
   zombies.push(z0);
   return z0;
+}
+
+/** Take a body out of the shootable set without removing it from the world. */
+function unregisterZombie(z) {
+  for (const part of [z.torso, z.head]) {
+    const i = hitboxes.indexOf(part);
+    if (i !== -1) hitboxes.splice(i, 1);
+  }
 }
 
 function removeZombie(z, index) {
@@ -2456,6 +2527,15 @@ function killZombie(z) {
 }
 
 function damageZombie(z, amount, head, dir, point) {
+  // shooting a Reviver while it is down is the only way to keep it down
+  if (z.dying > 0 && z.kind === "reviver") {
+    z.finished = true;
+    z.dying = CORPSE_TIME; // skip straight to fading away
+    spatter(point, dir, 12);
+    sfx.headshot();
+    addPoints(PTS_KILL);
+    return;
+  }
   z.hp -= bonusActive("instakill") ? z.maxHp : amount * (powerActive("damage") ? power.amount : 1);
   z.flash = 1;
   spatter(point, dir, head ? 14 : 7);
@@ -2632,7 +2712,16 @@ function movePlayer(dt) {
 
   // vertical
   player.vy -= GRAVITY * dt;
+  const wasY = player.pos.y;
   player.pos.y += player.vy * dt;
+
+  if (player.vy > 0) {
+    const roof = ceilingAt(player.pos, PLAYER_R, wasY);
+    if (player.pos.y + EYE + 0.15 > roof) {
+      player.pos.y = Math.max(wasY, roof - EYE - 0.15);
+      player.vy = 0;
+    }
+  }
 
   // arena bounds
   const limit = HALF - 0.8;
@@ -2681,11 +2770,33 @@ function updateZombies(dt) {
 
     if (z.dying > 0) {
       z.dying += dt;
-      const t = Math.min(1, z.dying / 1.3);
-      g.rotation.x = -t * Math.PI * 0.5;
-      g.position.y = -t * 0.35;
-      for (const m of z.mats) m.opacity = 1 - t;
-      if (t >= 1) removeZombie(z, i);
+      const fall = Math.min(1, z.dying / 1.3);
+      g.rotation.x = -fall * Math.PI * 0.5;
+      g.position.y = z.y - fall * 0.35;
+
+      // A Reviver is only down, not out. Shoot the body to finish it.
+      if (z.kind === "reviver" && !z.finished) {
+        if (z.dying >= REVIVE_TIME) {
+          z.dying = 0;
+          z.alive = true;
+          z.hp = z.maxHp * 0.6;
+          g.rotation.x = 0;
+          spatter(g.position, new THREE.Vector3(0, 1, 0), 10);
+          sfx.dig(g.position.distanceTo(player.pos));
+          continue;
+        }
+        continue; // stays targetable while down
+      }
+
+      // everything else lies there a while, then fades out
+      if (z.dying > CORPSE_TIME) {
+        const gone = Math.min(1, (z.dying - CORPSE_TIME) / 2);
+        for (const m of z.mats) m.opacity = 1 - gone;
+        if (gone >= 1) removeZombie(z, i);
+      } else if (z.corpseCleared !== true && fall >= 1) {
+        z.corpseCleared = true;
+        unregisterZombie(z); // a body is scenery, not a target
+      }
       continue;
     }
 
@@ -2828,7 +2939,12 @@ function updateZombies(dt) {
       mvz = z.flankZ;
     }
 
-    if (dist > 1.35) {
+    const keepAway = z.kind === "marksman" && dist < 26;
+    if (keepAway) {
+      const stunK0 = (z.stun ?? 0) > 0 ? 0.25 : 1;
+      g.position.x -= mvx * z.speed * hordeK * stunK0 * dt;
+      g.position.z -= mvz * z.speed * hordeK * stunK0 * dt;
+    } else if (dist > 1.35) {
       const stunK = (z.stun ?? 0) > 0 ? 0.25 : 1;
       if ((z.stun ?? 0) > 0) z.stun -= dt;
       g.position.x += (mvx * z.speed * hordeK * stunK + sep.x * 5) * dt;
@@ -2841,6 +2957,7 @@ function updateZombies(dt) {
       // can't claw you from the top of a crate
       if (z.attackCd <= 0 && hordeK > 0 && Math.abs(z.y - player.pos.y) < 1.6) {
         z.attackCd = 1.05;
+        game.killedBy = ZOMBIE_TYPES[z.kind]?.label ?? "a zombie";
         hurtPlayer(z.damage);
       }
     }
@@ -2875,6 +2992,39 @@ function updateZombies(dt) {
       }
     }
 
+    // ── the hopper: bounds along, then throws itself at you ──
+    if (z.kind === "hopper" && z.grounded && !z.climbing) {
+      z.hopCd = (z.hopCd ?? 0) - dt;
+      if (z.hopCd <= 0) {
+        const pounce = dist < 13;
+        z.hopCd = pounce ? 1.6 : 0.7 + Math.random() * 0.5;
+        z.vy = pounce ? 10.5 : 6.5;
+        z.grounded = false;
+        if (pounce) {
+          g.position.x += mvx * 1.2;
+          g.position.z += mvz * 1.2;
+        }
+      }
+    }
+
+    // ── the Marksman: hangs back and snipes ──
+    if (z.kind === "marksman") {
+      z.shotCd = (z.shotCd ?? 2) - dt;
+      const clearShot =
+        dist < 60 &&
+        !pathBlocked(g.position.x, g.position.z, toPlayer.x, toPlayer.z, z.y, z.radius, Math.min(dist, 60));
+      if (clearShot && z.shotCd <= 0) {
+        z.shotCd = 3.2;
+        tracer(
+          new THREE.Vector3(g.position.x, z.y + 1.5, g.position.z),
+          new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z),
+        );
+        sfx.shot({ tone: 260, volume: 0.8 });
+        game.killedBy = ZOMBIE_TYPES.marksman.label;
+        hurtPlayer(z.damage);
+      }
+    }
+
     if (!z.climbing) {
       if (z.grounded) {
         if (touching && blockedBy <= z.y + 1.5) {
@@ -2890,7 +3040,18 @@ function updateZombies(dt) {
       }
 
       z.vy -= GRAVITY * dt;
+      const wasY = z.y;
       z.y += z.vy * dt;
+
+      // A jump or a climb must stop at the underside of whatever is above.
+      if (z.vy > 0) {
+        const roof = ceilingAt(g.position, z.radius, wasY);
+        if (z.y + 1.8 > roof) {
+          z.y = Math.max(wasY, roof - 1.8);
+          z.vy = 0;
+          z.climbing = false;
+        }
+      }
       const zFloor = groundHeightAt(g.position, z.radius, z.y);
       if (z.y <= zFloor) {
         z.y = zFloor;
@@ -3855,6 +4016,7 @@ function beginPlay() {
 function resetGame() {
   player.alive = true;
   player.respawn = 0;
+  game.killedBy = null;
   for (let i = zombies.length - 1; i >= 0; i--) removeZombie(zombies[i], i);
   buildMap(mapById(game.mapId));
   const [sx, sz] = mapDef.start;
@@ -3891,6 +4053,11 @@ function resetGame() {
 }
 
 function endGame() {
+  if (!game.dm) {
+    const h1 = ui.dead.querySelector("h1");
+    h1.textContent = game.killedBy ? `KILLED BY ${game.killedBy.toUpperCase()}` : "YOU DIED";
+    h1.className = "red";
+  }
   if (game.dm) {
     // eliminated, not finished
     player.alive = false;
