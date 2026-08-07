@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ibrahimmohammednaji2-bot.github.io/outbreak-zombie-shooter/sitemap.xml
