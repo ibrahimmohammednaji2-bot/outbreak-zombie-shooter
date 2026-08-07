@@ -8,3 +8,5 @@ public-url.txt
 online.log
 tunnel.log
 server/data.json
+dist-portal
+*.zip
