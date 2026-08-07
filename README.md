@@ -1,4 +1,4 @@
-# Outbreak
+# Zombie Attack
 
 A 3D zombie survival shooter that runs in the browser. Built with
 [Three.js](https://threejs.org) and [Vite](https://vite.dev) — no game engine,

@@ -4,3 +4,7 @@ dist/
 *.local
 .DS_Store
 Thumbs.db
+public-url.txt
+online.log
+tunnel.log
+server/data.json

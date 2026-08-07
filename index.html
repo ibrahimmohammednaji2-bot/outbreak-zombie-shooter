@@ -3,13 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Outbreak — Zombie Shooter Prototype</title>
+    <title>Zombie Attack</title>
   </head>
   <body>
     <canvas id="scene"></canvas>
 
     <!-- red flash when the player takes damage -->
     <div id="vignette"></div>
+    <!-- white-out when a flashbang goes off -->
+    <div id="flash"></div>
 
     <div id="hud" class="hidden">
       <div id="crosshair"><span></span><span></span><span></span><span></span></div>
@@ -25,42 +27,174 @@
         <div id="weapon-name">Pistol</div>
         <div id="ammo"><span id="mag">12</span><span id="reserve">/ 90</span></div>
         <div id="reloading" class="hidden">RELOADING</div>
+        <div id="equip-line"></div>
       </div>
 
       <div id="hud-top">
+        <div id="points-label"><span id="points">0</span> POINTS</div>
         <div id="wave-label">WAVE <span id="wave">1</span></div>
         <div id="kills-label"><span id="kills">0</span> KILLS</div>
         <div id="remaining-label"><span id="remaining">0</span> LEFT</div>
       </div>
 
+      <button id="power-btn" class="hidden">
+        <span class="pk">E</span>
+        <span class="pn">—</span>
+      </button>
       <div id="loadout"></div>
+      <div id="bonus"></div>
+      <div id="scoreboard" class="hidden"></div>
+      <div id="respawning" class="hidden">
+        <div class="big">ELIMINATED</div>
+        <div class="small-txt">Respawning in <span id="respawn-in">3</span></div>
+      </div>
+      <div id="prompt" class="hidden"></div>
       <div id="toast"></div>
       <div id="banner"></div>
     </div>
 
-    <div id="start" class="overlay">
+    <!-- main screen: character in the middle, buttons bottom-right -->
+    <div id="lobby">
+      <div id="lobby-title">
+        ZOMBIE ATTACK
+        <small>W A S D walk · Double-tap W to run · Shift crouch · Mouse aim ·
+          Hold click to fire · Space jump · R reload · E power ·
+          1 2 3 weapons · Z lethal · X tactical · F box · Esc pause</small>
+      </div>
+
+      <div id="device-line"></div>
+      <div id="account-box"></div>
+      <div id="code-box"></div>
+
+      <button id="skins-btn">SKINS</button>
+
+      <div id="lobby-panel" class="hidden"></div>
+
+      <div id="lobby-buttons">
+        <button id="party-btn" class="stack-btn">
+          <span class="sb-title">PARTY</span>
+          <span class="sb-sub" id="party-sub">Not in a party</span>
+        </button>
+        <button id="settings-btn" class="stack-btn">
+          <span class="sb-title">MODE · MAP · DIFFICULTY</span>
+          <span class="sb-sub" id="settings-sub"></span>
+        </button>
+        <button id="play-btn" class="play-btn">START GAME</button>
+      </div>
+    </div>
+
+
+    <!-- asked once, remembered after -->
+    <div id="device" class="overlay hidden">
       <div class="panel">
-        <h1>OUTBREAK</h1>
-        <p class="sub">3D zombie shooter — playable prototype</p>
-        <ul class="keys">
-          <li><b>W A S D</b> move</li>
-          <li><b>Mouse</b> look · <b>Click</b> fire</li>
-          <li><b>Shift</b> sprint · <b>Space</b> jump</li>
-          <li><b>R</b> reload · <b>1 2 3</b> weapons</li>
-          <li><b>Esc</b> pause</li>
-        </ul>
-        <button id="start-btn">CLICK TO PLAY</button>
-        <p class="note">
-          Survive the waves. Kills unlock better weapons — the rifle at 15, the
-          shotgun at 40.
-        </p>
+        <h1 class="small">HOW ARE YOU PLAYING?</h1>
+        <p class="sub">This decides whether you get on-screen controls.</p>
+        <div class="nav">
+          <button data-device="laptop">LAPTOP / PC</button>
+          <button data-device="touch" class="ghost">IPAD / TABLET</button>
+        </div>
+        <p class="note">You can change this later from the main screen.</p>
+      </div>
+    </div>
+
+    <!-- on-screen controls, tablets only -->
+    <div id="touch" class="hidden">
+      <div id="stick"><div id="stick-knob"></div></div>
+
+      <button class="tbtn fire" data-touch="fire"><span>❱</span>FIRE</button>
+
+      <button class="tbtn c1" data-touch="jump"><span>⤒</span>JUMP</button>
+      <button class="tbtn c2" data-touch="crouch"><span>⤓</span>CROUCH</button>
+      <button class="tbtn c3" data-touch="reload"><span>⟳</span>RELOAD</button>
+
+      <button class="tbtn s1" data-touch="power"><span>✦</span>POWER</button>
+      <button class="tbtn s2" id="t-lethal" data-touch="lethal"><span>◉</span>LETHAL</button>
+      <button class="tbtn s3" id="t-tactical" data-touch="tactical"><span>◍</span>TACT</button>
+      <button class="tbtn s4" data-touch="box"><span>▣</span>USE</button>
+
+      <div id="tswitch">
+        <button class="tslot" data-touch="w1">1</button>
+        <button class="tslot" data-touch="w2">2</button>
+        <button class="tslot" data-touch="w3">3</button>
+      </div>
+
+      <button class="tbtn pause" data-touch="pause"><span>❙❙</span></button>
+    </div>
+    <div id="signin" class="overlay hidden">
+      <div class="panel">
+        <h1 class="small">SIGN IN</h1>
+        <p class="sub">Pick a name. Your coins, skins and codes are kept under it.</p>
+        <div class="code-row" style="margin-bottom:14px">
+          <input id="name-input" type="text" placeholder="your name" maxlength="18"
+                 autocomplete="off" spellcheck="false" />
+        </div>
+        <div id="profile-list"></div>
+        <div class="nav">
+          <button id="signin-go">SIGN IN</button>
+          <button class="ghost" id="signin-cancel">CANCEL</button>
+        </div>
+        <p class="note" id="signin-note"></p>
+      </div>
+    </div>
+
+    <!-- create a class -->
+    <div id="mp" class="hidden">
+      <div class="mp-head">
+        <input id="mp-name" maxlength="16" spellcheck="false" autocomplete="off" />
+        <div class="mp-points">
+          <div id="mp-pips"></div>
+          <span id="mp-count">10/10</span>
+        </div>
+      </div>
+
+      <div id="mp-classes"></div>
+
+      <div class="mp-grid">
+        <div class="mp-col" id="mp-left"></div>
+        <div class="mp-col" id="mp-right"></div>
+      </div>
+
+      <div class="mp-foot">
+        <button class="ghost" id="mp-back">BACK</button>
+        <div class="mp-opp">
+          <span class="label">OPPONENTS</span>
+          <button class="opp on" data-opp="bots">BOTS</button>
+          <button class="opp" data-opp="real">REAL PLAYERS</button>
+        </div>
+        <div id="mp-status"></div>
+        <button id="mp-find">FIND MATCH</button>
+      </div>
+
+      <div id="mp-picker" class="hidden">
+        <div class="picker-panel">
+          <div class="picker-head">
+            <h3 id="picker-title">CHOOSE</h3>
+            <button class="ghost" id="picker-close">CLOSE</button>
+          </div>
+          <div id="picker-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="skins" class="hidden">
+      <div id="skins-head">
+        <h2>SKINS</h2>
+        <div id="wallet"><b id="coin-count">0</b> COINS</div>
+        <button id="skins-close" class="ghost">BACK</button>
+      </div>
+      <div id="skins-split">
+        <div id="skins-list"></div>
+        <div id="skins-detail"></div>
       </div>
     </div>
 
     <div id="pause" class="overlay hidden">
       <div class="panel">
         <h1>PAUSED</h1>
-        <button id="resume-btn">RESUME</button>
+        <div class="btn-row">
+          <button id="resume-btn">RESUME</button>
+          <button id="quit-btn" class="ghost">MAIN MENU</button>
+        </div>
       </div>
     </div>
 
@@ -70,7 +204,10 @@
         <p class="sub">
           Wave <b id="dead-wave">1</b> · <b id="dead-kills">0</b> kills
         </p>
-        <button id="retry-btn">TRY AGAIN</button>
+        <div class="btn-row">
+          <button id="retry-btn">TRY AGAIN</button>
+          <button id="menu-btn" class="ghost">MAIN MENU</button>
+        </div>
       </div>
     </div>
 
