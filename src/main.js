@@ -848,8 +848,8 @@ function ruinBlock(x, z, seed) {
  */
 function house(x, z, seed = 1, boxSink = null) {
   const rnd = rngFrom(seed);
-  const HW = 8.2 + rnd() * 2.6;
-  const HD = 8.2 + rnd() * 2.6;
+  const HW = 16.4 + rnd() * 5.2;
+  const HD = 16.4 + rnd() * 5.2;
   const H = 3.2;
   const T = 0.5;
   const FLOOR = H + 0.1;
@@ -876,6 +876,28 @@ function house(x, z, seed = 1, boxSink = null) {
     ...ruinWall(x + HW, z, "z", HD * 2, H, T, wall, rnd, { gap: 0.28, low: 0.2 }),
   );
 
+
+  // ── interior partitions: real rooms, each with a doorway ──
+  // A run split either side of a gap, so there is always a way through.
+  const wallRun = (cx, cz, axis, span, gapAt, thickness, y = 0) => {
+    const door = 3;
+    const seg = span - door / 2;
+    const off = door / 2 + seg / 2;
+    const out = [];
+    for (const dir of [-1, 1]) {
+      const ax = axis === "x" ? cx + dir * off : cx;
+      const az = axis === "x" ? cz : cz + dir * off;
+      out.push(...ruinWall(ax, az, axis, seg, H, thickness, wall, rnd, { gap: 0.1, low: 0.08, y }));
+    }
+    void gapAt;
+    return out;
+  };
+
+  // one wall down the middle, one across the back half: three rooms
+  p.push(
+    ...wallRun(x - HW * 0.12, z, "z", HD, 0, 0.4),
+    ...wallRun(x + HW * 0.45, z - HD * 0.3, "x", HW * 0.55, 0, 0.4),
+  );
   // ── kitchen along the back ──
   const kx = x - HW * 0.55;
   p.push(
@@ -902,6 +924,23 @@ function house(x, z, seed = 1, boxSink = null) {
   if (rnd() > 0.35) p.push(box(x - HW + 0.6, z + HD * 0.6, 0.45, 2, 1.9, 0x5a4632));
   if (rnd() > 0.45) p.push(box(x + HW * 0.35, z + HD * 0.5, 1.6, 0.75, 0.9, 0x6b5540, rnd() * 3));
   if (rnd() > 0.5) p.push(box(x + HW * 0.4, z - HD * 0.4, 1.1, 1.5, 0.6, 0x4f3f2e, rnd()));
+
+  // ── the room behind the partition: dining and storage ──
+  const dx = x + HW * 0.5;
+  const dz = z + HD * 0.25;
+  p.push(
+    box(dx, dz, 2.6, 0.75, 1.4, 0x6b5540), // dining table
+    box(dx - 1.7, dz, 0.5, 0.9, 0.5, 0x5a4632, 0.2), // chairs
+    box(dx + 1.7, dz, 0.5, 0.9, 0.5, 0x5a4632, -0.3),
+    box(dx, dz - 1.4, 0.5, 0.9, 0.5, 0x5a4632),
+    box(dx + HW * 0.28, dz + HD * 0.3, 0.5, 2.1, 2.4, 0x4f3f2e), // dresser
+  );
+  if (rnd() > 0.4) {
+    p.push(box(dx - HW * 0.1, dz + HD * 0.42, 1.6, 1.1, 1.2, CRATE, rnd() * 3));
+  }
+  if (rnd() > 0.45) {
+    p.push(box(dx + HW * 0.2, dz - HD * 0.42, 1.3, 0.9, 1.3, CRATE, rnd() * 3));
+  }
 
   if (twoStorey) {
     // upper floor, part of it fallen in
@@ -972,6 +1011,14 @@ function house(x, z, seed = 1, boxSink = null) {
     if (rnd() > 0.4) {
       p.push(box(x - HW * 0.1, z + HD * 0.5, 0.6, 0.85, 0.6, 0x6b5540, rnd() * 3, FLOOR + 0.35));
     }
+
+    // a partition and a second room up here too
+    p.push(
+      ...wallRun(x - HW * 0.12, z, "z", HD * 0.8, 0, 0.4, FLOOR + 0.35),
+      box(x - HW * 0.62, z + HD * 0.55, 2.2, 0.4, 1.6, 0x5a4632, 0, FLOOR + 0.35),
+      box(x - HW * 0.62, z + HD * 0.55, 2.1, 0.25, 1.5, 0xb0a894, 0, FLOOR + 0.75),
+      box(x + HW * 0.3, z - HD * 0.5, 1.4, 1, 1.4, CRATE, rnd() * 3, FLOOR + 0.35),
+    );
   }
 
   // ── collapsed roof: bare rafters, some fallen through ──
@@ -1048,9 +1095,9 @@ const MAPS = [
     props: [
       ...house(0, 0, 91, forestBoxes),
       // woodland, kept clear of the cabin and its approach
-      ...scatter(58, 5, (rnd) => {
+      ...scatter(150, 5, (rnd) => {
         const a = rnd() * Math.PI * 2;
-        const d = 15 + rnd() * 30;
+        const d = 26 + rnd() * 42;
         return tree(Math.cos(a) * d, Math.sin(a) * d, 0.75 + rnd() * 0.8);
       }).flat(),
       ...scatter(12, 149, (rnd) => {
@@ -1092,16 +1139,16 @@ const MAPS = [
       ...ruinBlock(-58, 62, 151),
       ...ruinBlock(58, -62, 163),
       // houses filling the blocks between them
-      ...house(-13, 2, 3, cityBoxes),
-      ...house(15, 6, 7, cityBoxes),
-      ...house(-3, -22, 13),
-      ...house(8, 24, 19),
-      ...house(-44, -8, 29),
-      ...house(44, -6, 41),
-      ...house(-16, -46, 59),
-      ...house(20, 46, 67),
-      ...house(-40, 60, 79),
-      ...house(42, -46, 97),
+      ...house(-30, 4, 3, cityBoxes),
+      ...house(34, 12, 7, cityBoxes),
+      ...house(-6, -50, 13),
+      ...house(18, 54, 19),
+      ...house(-88, -16, 29),
+      ...house(88, -12, 41),
+      ...house(-36, -92, 59),
+      ...house(44, 92, 67),
+      ...house(-84, 96, 79),
+      ...house(86, -92, 97),
       // wrecked cars through the streets
       ...scatter(46, 23, (rnd) => {
         const a = rnd() * Math.PI * 2;
