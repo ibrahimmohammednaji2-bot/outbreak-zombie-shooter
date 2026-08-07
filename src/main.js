@@ -46,6 +46,21 @@ import {
   pointsUsed,
   attachmentLimit,
 } from "./mp.js";
+import {
+  shop,
+  saveShop,
+  TOKEN_PACKS,
+  DAILY_COINS,
+  MAX_REVIVES,
+  offerOfTheDay,
+  freebieReady,
+  claimFreebie,
+  hasToken,
+  spendToken,
+  grantUnlimited,
+  priceOf,
+  buyPack,
+} from "./shop.js";
 import "./style.css";
 
 /* ════════════════════════════════════════════════════════════════
@@ -1462,6 +1477,7 @@ function buildMap(def) {
     });
   }
 
+  placePerkMachines();
   buildGrid(); // everything is placed — index it for fast lookups
 }
 
@@ -1965,6 +1981,46 @@ function spawnZombie(wave) {
   return z0;
 }
 
+/* ── perk machines ───────────────────────────────────────────── */
+
+const PERKS_FOR_SALE = [
+  { id: "jugg",   name: "Juggernaut", cost: 2500, colour: 0xd64545, desc: "Double health" },
+  { id: "speed",  name: "Speed Cola", cost: 3000, colour: 0x4aa3ff, desc: "Reload twice as fast" },
+  { id: "dtap",   name: "Double Tap", cost: 2000, colour: 0xffc94a, desc: "Double damage" },
+  { id: "stamin", name: "Stamin-Up", cost: 2000, colour: 0x5fd77a, desc: "Move half again as fast" },
+];
+
+const perkMachines = [];
+const ownedPerks = new Set();
+
+const hasPerk = (id) => ownedPerks.has(id);
+
+/** Stand them at the four corners of the arena, well apart. */
+function placePerkMachines() {
+  perkMachines.length = 0;
+  const r = HALF * 0.5;
+  PERKS_FOR_SALE.forEach((perk, i) => {
+    const a = (i / PERKS_FOR_SALE.length) * Math.PI * 2 + 0.6;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+
+    const body = new THREE.Mesh(
+      UNIT_BOX,
+      new THREE.MeshLambertMaterial({ color: perk.colour, emissive: perk.colour, emissiveIntensity: 0.25 }),
+    );
+    body.scale.set(1.3, 2.1, 1);
+    body.position.set(x, 1.05, z);
+    body.castShadow = true;
+    mapGroup.add(body);
+
+    const glow = new THREE.PointLight(perk.colour, 2.4, 12, 2);
+    glow.position.set(x, 2.4, z);
+    mapGroup.add(glow);
+
+    obstacles.push({ x, z, hw: 0.7, hd: 0.55, bottom: 0, top: 2.1, cos: 1, sin: 0 });
+    perkMachines.push({ perk, x, z, glow });
+  });
+}
 /** Take a body out of the shootable set without removing it from the world. */
 function unregisterZombie(z) {
   for (const part of [z.torso, z.head]) {
@@ -1992,6 +2048,7 @@ const player = {
   vy: 0,
   grounded: true,
   hp: 100,
+  maxHp: 100,
   alive: true,
   respawn: 0,
   blind: 0,
@@ -2036,6 +2093,7 @@ const game = {
   slots: startingSlots(),
   points: 0,
   dm: false,
+  revivesUsed: 0,
   score: 0,
   burstLeft: 0,
   burstTimer: 0,
@@ -2081,8 +2139,8 @@ function renderLoadout() {
 
 function syncHud() {
   const w = curWeapon();
-  ui.healthBar.style.width = `${Math.max(0, player.hp)}%`;
-  ui.healthBar.classList.toggle("low", player.hp <= 35);
+  ui.healthBar.style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+  ui.healthBar.classList.toggle("low", player.hp <= player.maxHp * 0.35);
   ui.healthText.textContent = Math.max(0, Math.round(player.hp));
   ui.weaponName.textContent = w.name;
   ui.mag.textContent = w.melee ? "∞" : curSlot().mag;
@@ -2439,22 +2497,68 @@ function boxInReach() {
   return null;
 }
 
+/** The nearest perk machine you are standing at, if any. */
+function perkInReach() {
+  for (const m of perkMachines) {
+    const dx = m.x - player.pos.x;
+    const dz = m.z - player.pos.z;
+    if (dx * dx + dz * dz < 9 && Math.abs(player.pos.y) < 2.5) return m;
+  }
+  return null;
+}
+
+let nearPerk = null;
+
+function buyPerk(perk) {
+  if (hasPerk(perk.id)) {
+    toast("YOU ALREADY HAVE THAT");
+    return;
+  }
+  if (game.points < perk.cost) {
+    sfx.dryFire();
+    return;
+  }
+  game.points -= perk.cost;
+  ownedPerks.add(perk.id);
+
+  if (perk.id === "jugg") {
+    player.maxHp = 200;
+    player.hp = player.maxHp; // the bottle heals you as it doubles you
+  }
+
+  sfx.unlock();
+  toast(`${perk.name.toUpperCase()} — ${perk.desc.toUpperCase()}`);
+  syncHud();
+}
+
 function updateBoxPrompt() {
-  nearBox = game.running && !game.over ? boxInReach() : null;
+  const live = game.running && !game.over;
+  nearBox = live ? boxInReach() : null;
+  nearPerk = live && !nearBox ? perkInReach() : null;
   const el = ui.prompt;
-  if (!nearBox) {
+
+  if (!nearBox && !nearPerk) {
     el.classList.add("hidden");
     return;
   }
-  const affordable = game.points >= BOX_COST;
+
+  const cost = nearBox ? BOX_COST : nearPerk.perk.cost;
+  const owned = nearPerk && hasPerk(nearPerk.perk.id);
+  const affordable = game.points >= cost;
+
   el.classList.remove("hidden");
-  el.classList.toggle("poor", !affordable);
-  el.innerHTML = affordable
-    ? `<b>F</b>MYSTERY BOX — ${BOX_COST} POINTS`
-    : `<b>F</b>NEED ${BOX_COST - game.points} MORE POINTS`;
+  el.classList.toggle("poor", !owned && !affordable);
+
+  if (owned) el.innerHTML = `<b>✓</b>${nearPerk.perk.name.toUpperCase()} — ALREADY YOURS`;
+  else if (affordable)
+    el.innerHTML = nearBox
+      ? `<b>F</b>MYSTERY BOX — ${BOX_COST} POINTS`
+      : `<b>F</b>${nearPerk.perk.name.toUpperCase()} — ${cost} POINTS · ${nearPerk.perk.desc}`;
+  else el.innerHTML = `<b>F</b>NEED ${cost - game.points} MORE POINTS`;
 }
 
 function useBox() {
+  if (nearPerk && !nearBox) return buyPerk(nearPerk.perk);
   if (!nearBox) return;
   if (game.points < BOX_COST) {
     sfx.dryFire();
@@ -2536,7 +2640,7 @@ function damageZombie(z, amount, head, dir, point) {
     addPoints(PTS_KILL);
     return;
   }
-  z.hp -= bonusActive("instakill") ? z.maxHp : amount * (powerActive("damage") ? power.amount : 1);
+  z.hp -= bonusActive("instakill") ? z.maxHp : amount * (hasPerk("dtap") ? 2 : 1) * (powerActive("damage") ? power.amount : 1);
   z.flash = 1;
   spatter(point, dir, head ? 14 : 7);
   head ? sfx.headshot() : sfx.flesh();
@@ -2629,7 +2733,7 @@ function startReload() {
   const w = curWeapon();
   if (w.melee) return; // nothing to load
   if (game.reloadTimer > 0 || curSlot().mag >= w.mag || curSlot().reserve <= 0) return;
-  game.reloadTimer = w.reload;
+  game.reloadTimer = w.reload * (hasPerk("speed") ? 0.5 : 1);
   sfx.reload();
   syncHud();
 }
@@ -2702,7 +2806,8 @@ function movePlayer(dt) {
   const speed =
     (crouching ? CROUCH_SPEED : running ? RUN_SPEED : WALK_SPEED) *
     (powerActive("sprint") ? power.amount : 1) *
-    (player.slow > 0 ? 0.45 : 1);
+    (player.slow > 0 ? 0.45 : 1) *
+    (hasPerk("stamin") ? 1.5 : 1);
 
   if (moving) wish.normalize().multiplyScalar(speed);
 
@@ -3147,7 +3252,7 @@ function animate() {
         game.intermission = 4;
         sfx.waveClear();
         banner(`WAVE ${game.wave} CLEARED`, 2600);
-        player.hp = Math.min(100, player.hp + 25);
+        player.hp = Math.min(player.maxHp, player.hp + 25);
         earnCoins(COINS_PER_WAVE); // paid for surviving it
         refillEquipment();
         toast(`+25 HP · +${COINS_PER_WAVE} COINS`);
@@ -3203,7 +3308,7 @@ function animate() {
 
     // health regen after a lull
     if (game.time - player.lastHit > 5 && player.hp < 100) {
-      player.hp = Math.min(100, player.hp + 7 * dt);
+      player.hp = Math.min(player.maxHp, player.hp + 7 * dt);
       syncHud();
     }
   }
@@ -3668,6 +3773,8 @@ function redeem() {
 
   if (entry === tidy(REDEEM_CODE)) {
     const n = redeemCode();
+    grantUnlimited();
+    renderShopButton();
     renderCodeBox();
     codeMessage(`ALL ${n} SKINS UNLOCKED`, true);
     sfx.unlock();
@@ -4017,6 +4124,9 @@ function resetGame() {
   player.alive = true;
   player.respawn = 0;
   game.killedBy = null;
+  game.revivesUsed = 0;
+  ownedPerks.clear();
+  player.maxHp = 100;
   for (let i = zombies.length - 1; i >= 0; i--) removeZombie(zombies[i], i);
   buildMap(mapById(game.mapId));
   const [sx, sz] = mapDef.start;
@@ -4075,6 +4185,10 @@ function endGame() {
   ui.deadWave.textContent = game.wave;
   ui.deadKills.textContent = game.kills;
   controls.unlock();
+  $("revive-btn").classList.toggle(
+    "hidden",
+    game.dm || !hasToken() || game.revivesUsed >= MAX_REVIVES,
+  );
   ui.dead.classList.remove("hidden");
 }
 
@@ -5143,3 +5257,124 @@ else askDevice();
 document.body.addEventListener("click", (e) => {
   if (e.target.closest("#device-change")) askDevice();
 });
+
+/* ── shop, tokens and revives ────────────────────────────────── */
+
+function renderShopButton() {
+  $("shop-sub").textContent = freebieReady()
+    ? "Daily reward waiting"
+    : `${shop.unlimited ? "∞" : shop.tokens} token${shop.tokens === 1 && !shop.unlimited ? "" : "s"}`;
+}
+
+function renderShop() {
+  const offer = offerOfTheDay();
+  $("shop-coins").textContent = wallet.coins;
+  $("shop-tokens").textContent = shop.unlimited ? "∞" : shop.tokens;
+
+  $("shop-body").innerHTML = `
+    <div class="offer">
+      <div class="tag">TODAY ONLY</div>
+      <div class="name">${offer.name}</div>
+      <div class="detail">${offer.detail}${offer.aed ? ` — ${offer.aed} AED` : ""}</div>
+    </div>
+
+    <div class="freebie ${freebieReady() ? "" : "taken"}">
+      <span>${
+        freebieReady()
+          ? `Your daily reward is waiting — ${DAILY_COINS} coins.`
+          : "Daily reward already claimed. Come back tomorrow."
+      }</span>
+      ${freebieReady() ? `<button data-shop="freebie">CLAIM</button>` : ""}
+    </div>
+
+    <div class="panel-label">TOKENS — one revive each, up to ${MAX_REVIVES} a game</div>
+    <div class="pack-grid">
+      ${TOKEN_PACKS.map((p) => {
+        const price = priceOf(p);
+        const cut = offer.half && p.aed !== price;
+        const label = p.tokens === Infinity ? "Unlimited" : `${p.tokens} token${p.tokens > 1 ? "s" : ""}`;
+        return `
+          <button class="pack ${p.tokens === Infinity ? "unlimited" : ""}" data-shop="pack:${p.id}">
+            <span class="n">${label}</span>
+            ${p.coins ? `<span class="p">${p.coins} coins</span>` : ""}
+            <span class="p">${cut ? `<span class="was">${p.aed} AED</span> ` : ""}${price} AED</span>
+          </button>`;
+      }).join("")}
+    </div>
+
+    <div class="det-note warn" style="margin-top:18px">
+      Only the single token can be bought with coins. Real-money purchases need
+      a payment provider and a server to verify them, which this build does not
+      have — those prices are what they would cost.
+    </div>`;
+}
+
+$("shop-btn").addEventListener("click", () => {
+  renderShop();
+  $("shop").classList.remove("hidden");
+});
+
+$("shop-close").addEventListener("click", () => $("shop").classList.add("hidden"));
+
+$("shop-body").addEventListener("click", (e) => {
+  const el = e.target.closest("button[data-shop]");
+  if (!el) return;
+  const what = el.dataset.shop;
+
+  if (what === "freebie") {
+    const got = claimFreebie();
+    if (got) {
+      earnCoins(got);
+      sfx.unlock();
+      toast(`+${got} COINS`);
+    }
+  }
+
+  if (what.startsWith("pack:")) {
+    const pack = TOKEN_PACKS.find((p) => p.id === what.slice(5));
+    const result = buyPack(pack, wallet, saveWallet);
+    if (result === "ok") {
+      sfx.unlock();
+    } else if (result === "poor") {
+      sfx.dryFire();
+      toast(`NEED ${pack.coins - wallet.coins} MORE COINS`);
+    } else {
+      sfx.dryFire();
+      toast("REAL MONEY PURCHASES ARE NOT BUILT YET");
+    }
+  }
+
+  renderShop();
+  renderShopButton();
+});
+
+/** Spend a token to get back up where you fell. */
+function reviveWithToken() {
+  if (game.revivesUsed >= MAX_REVIVES || !hasToken()) return;
+  if (!spendToken()) return;
+
+  game.revivesUsed++;
+  game.over = false;
+  player.alive = true;
+  player.hp = player.maxHp;
+  player.lastHit = game.time;
+  game.killedBy = null;
+
+  // clear the crowd that killed you so you are not dropped straight back in
+  for (const z of zombies) {
+    if (z.dying <= 0 && z.group.position.distanceTo(player.pos) < 14) killZombie(z);
+  }
+
+  ui.dead.classList.add("hidden");
+  game.running = true;
+  clock.getDelta();
+  if (!touchMode) controls.lock();
+  sfx.unlock();
+  toast(`REVIVED — ${MAX_REVIVES - game.revivesUsed} LEFT THIS GAME`);
+  syncHud();
+  renderShopButton();
+}
+
+$("revive-btn").addEventListener("click", reviveWithToken);
+
+renderShopButton();

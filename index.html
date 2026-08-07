@@ -93,6 +93,10 @@
 
       <div id="device-line"></div>
       <div id="account-box"></div>
+      <button id="shop-btn">
+        <span class="shop-title">SHOP</span>
+        <span class="shop-sub" id="shop-sub">Daily reward waiting</span>
+      </button>
       <div id="code-box"></div>
 
       <button id="skins-btn">SKINS</button>
@@ -205,6 +209,15 @@
       </div>
     </div>
 
+    <div id="shop" class="hidden">
+      <div id="skins-head">
+        <h2>SHOP</h2>
+        <div id="wallet"><b id="shop-coins">0</b> COINS · <b id="shop-tokens">0</b> TOKENS</div>
+        <button id="shop-close" class="ghost">BACK</button>
+      </div>
+      <div id="shop-body"></div>
+    </div>
+
     <div id="skins" class="hidden">
       <div id="skins-head">
         <h2>SKINS</h2>
@@ -234,6 +247,7 @@
           Wave <b id="dead-wave">1</b> · <b id="dead-kills">0</b> kills
         </p>
         <div class="btn-row">
+          <button id="revive-btn" class="hidden">USE TOKEN TO REVIVE</button>
           <button id="retry-btn">TRY AGAIN</button>
           <button id="menu-btn" class="ghost">MAIN MENU</button>
         </div>
