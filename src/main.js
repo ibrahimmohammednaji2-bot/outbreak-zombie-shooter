@@ -1909,6 +1909,28 @@ function rollKind() {
 
 const CORPSE_TIME = 60; // how long a body lies there before it fades
 const REVIVE_TIME = 5; // a Reviver gets back up this long after falling
+const MAX_LIVE = 16; // how many can be on their feet at once
+const MAX_CORPSES = 10; // bodies left lying about before the oldest fade
+
+/*
+ * Still in the fight. A body counts as dead the instant it drops — except a
+ * Reviver, which is only down until someone finishes it, so it must keep its
+ * place in the wave and in the count of what is left.
+ */
+const stillFighting = (z) => z.dying <= 0 || (z.kind === "reviver" && !z.finished);
+const liveCount = () => zombies.reduce((n, z) => n + (stillFighting(z) ? 1 : 0), 0);
+
+/** Once the bodies pile up, send the oldest on their way early. */
+function trimCorpses() {
+  let corpses = zombies.filter((z) => !stillFighting(z) && z.dying < CORPSE_TIME);
+  while (corpses.length > MAX_CORPSES) {
+    let oldest = corpses[0];
+    for (const z of corpses) if (z.dying > oldest.dying) oldest = z;
+    oldest.dying = CORPSE_TIME;
+    corpses = corpses.filter((z) => z !== oldest);
+  }
+}
+
 function spawnZombie(wave) {
   const kind = wave >= 3 ? rollKind() : "walker";
   const type = ZOMBIE_TYPES[kind];
@@ -2158,7 +2180,7 @@ function syncHud() {
   ui.reloading.classList.toggle("hidden", game.reloadTimer <= 0);
   ui.wave.textContent = game.wave;
   ui.kills.textContent = game.kills;
-  ui.remaining.textContent = zombies.filter((z) => !z.dying).length + game.toSpawn;
+  ui.remaining.textContent = zombies.filter(stillFighting).length + game.toSpawn;
 }
 
 let hudAcc = 0;
@@ -2624,22 +2646,32 @@ function killZombie(z) {
   if (z.dying > 0) return;
   if (powerActive("vamp")) player.hp = Math.min(150, player.hp + power.amount);
   z.dying = 0.001;
-  game.kills++;
   addPoints(z.knifed ? PTS_KNIFE_KILL : PTS_KILL);
+  // A Reviver is only down. It pays out — the kill, the drop, the ammo —
+  // when it is finished off, not every time it falls over.
+  if (z.kind === "reviver" && !z.finished) return;
+  game.kills++;
   maybeDrop(z.group.position);
   curSlot().reserve = Math.min(400, curSlot().reserve + curWeapon().pickup);
+  trimCorpses();
 }
 
 function damageZombie(z, amount, head, dir, point) {
   // shooting a Reviver while it is down is the only way to keep it down
-  if (z.dying > 0 && z.kind === "reviver") {
+  if (z.dying > 0 && z.kind === "reviver" && !z.finished) {
     z.finished = true;
     z.dying = CORPSE_TIME; // skip straight to fading away
+    unregisterZombie(z); // and it is scenery now, not a target
     spatter(point, dir, 12);
     sfx.headshot();
     addPoints(PTS_KILL);
+    game.kills++;
+    maybeDrop(z.group.position);
+    curSlot().reserve = Math.min(400, curSlot().reserve + curWeapon().pickup);
+    trimCorpses();
     return;
   }
+  if (z.dying > 0) return; // a body cannot be killed twice
   z.hp -= bonusActive("instakill") ? z.maxHp : amount * (hasPerk("dtap") ? 2 : 1) * (powerActive("damage") ? power.amount : 1);
   z.flash = 1;
   spatter(point, dir, head ? 14 : 7);
@@ -3062,8 +3094,7 @@ function updateZombies(dt) {
       // can't claw you from the top of a crate
       if (z.attackCd <= 0 && hordeK > 0 && Math.abs(z.y - player.pos.y) < 1.6) {
         z.attackCd = 1.05;
-        game.killedBy = ZOMBIE_TYPES[z.kind]?.label ?? "a zombie";
-        hurtPlayer(z.damage);
+        hurtPlayer(z.damage, ZOMBIE_TYPES[z.kind]?.label ?? "a zombie");
       }
     }
 
@@ -3125,8 +3156,7 @@ function updateZombies(dt) {
           new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z),
         );
         sfx.shot({ tone: 260, volume: 0.8 });
-        game.killedBy = ZOMBIE_TYPES.marksman.label;
-        hurtPlayer(z.damage);
+        hurtPlayer(z.damage, ZOMBIE_TYPES.marksman.label);
       }
     }
 
@@ -3194,10 +3224,11 @@ function updateZombies(dt) {
   }
 }
 
-function hurtPlayer(amount) {
+function hurtPlayer(amount, by) {
   if (powerActive("shield")) return; // Bulwark
   if (!player.alive) return;
   if (game.over) return;
+  if (by) game.killedBy = by; // whoever lands the last blow gets named
   player.hp -= amount;
   player.lastHit = game.time;
   sfx.hurt();
@@ -3240,14 +3271,16 @@ function animate() {
     } else if (game.toSpawn > 0) {
       game.spawnTimer -= dt;
       // the detailed model costs more to draw, so fewer stand at once
-      if (game.spawnTimer <= 0 && zombies.length < 16) {
+      // corpses lie around for a minute, so only the ones on their feet
+      // count against the limit — otherwise a wave stops spawning entirely
+      if (game.spawnTimer <= 0 && liveCount() < MAX_LIVE) {
         game.spawnTimer =
           Math.max(0.2, 0.85 - game.wave * 0.04) * game.diff.rate;
         spawnZombie(game.wave);
         game.toSpawn--;
         syncHud();
       }
-    } else if (zombies.every((z) => z.dying > 0)) {
+    } else if (!zombies.some(stillFighting)) {
       if (game.intermission <= 0) {
         game.intermission = 4;
         sfx.waveClear();
