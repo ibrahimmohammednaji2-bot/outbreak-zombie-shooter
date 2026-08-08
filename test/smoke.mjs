@@ -217,6 +217,29 @@ if (carried.slow) note("a slow effect survived a restart");
 if (carried.revives) note("the revive count survived a restart");
 if (carried.zombiesLeft) note(`${carried.zombiesLeft} bodies survived a restart`);
 
+/*
+ * Die with Instakill running and the next game used to start with it. These
+ * expire at a game.time that a restart winds back to zero, so anything left
+ * set is still in the future when the new game begins.
+ */
+step("power-ups do not follow you into the next game");
+const followed = await page.evaluate(() => {
+  const p = window.__probe;
+  p.game.time = 100;
+  p.bonus.instakill = 220; // picked up moments before dying
+  p.bonus.points = 190;
+  p.lure.until = 260;
+  p.resetGame();
+  return {
+    instakill: p.bonusActive("instakill"),
+    points: p.bonusActive("points"),
+    decoy: p.lureActive(),
+  };
+});
+if (followed.instakill) note("Instakill carried into the next game");
+if (followed.points) note("Double Points carried into the next game");
+if (followed.decoy) note("a decoy carried into the next game");
+
 // ── every map has to build; one that throws leaves you on a dead screen ──
 step("every map builds");
 const maps = await page.evaluate(() => {
