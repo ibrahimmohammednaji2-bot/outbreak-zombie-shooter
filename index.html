@@ -47,7 +47,10 @@
       (function () {
         var shown = false;
         function show(title, detail) {
-          if (shown) return;
+          // Only for a game that never got going. Once it is running, a stray
+          // error — a browser refusing pointer lock, say — must not throw a
+          // full-screen panel over a game you are in the middle of.
+          if (shown || window.__started) return;
           shown = true;
           var el = document.getElementById("crash");
           el.style.display = "block";
@@ -127,8 +130,9 @@
     <div id="lobby">
       <div id="lobby-title">
         ZOMBIE ATTACK
-        <small>W A S D walk · Double-tap W to run · Shift crouch · Mouse aim ·
-          Hold click to fire · Space jump · R reload · E power ·
+        <small>W A S D walk · Double-tap W to run · Shift crouch · Mouse look ·
+          Hold left click to fire · Hold right click for the sights ·
+          Space jump · R reload · E power ·
           1 2 3 weapons · Z lethal · X tactical ·
           F box, perks, doors and wall guns · Esc pause</small>
       </div>
@@ -181,6 +185,7 @@
       <button class="tbtn c1" data-touch="jump"><span>⤒</span>JUMP</button>
       <button class="tbtn c2" data-touch="crouch"><span>⤓</span>CROUCH</button>
       <button class="tbtn c3" data-touch="reload"><span>⟳</span>RELOAD</button>
+      <button class="tbtn c4" id="t-aim" data-touch="aim"><span>◎</span>AIM</button>
 
       <button class="tbtn s1" data-touch="power"><span>✦</span>POWER</button>
       <button class="tbtn s2" id="t-lethal" data-touch="lethal"><span>◉</span>LETHAL</button>

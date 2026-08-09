@@ -558,6 +558,67 @@ const buttons = await page.evaluate(async () => {
 step(`  ${buttons.length} pressed: ${buttons.join(", ")}`);
 if (buttons.length < 7) note(`only ${buttons.length} shop buttons found, expected the packs and more`);
 
+// ── aiming down the sights ──
+step("right button aims, and only the right guns have sights");
+const sights = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  p.beginPlay(); // the free-for-all test above left us on the main screen
+  const startPoints = p.game.points;
+
+  const withSights = p.WEAPONS.filter((w) => p.hasSights(w)).map((w) => w.id);
+  const without = p.WEAPONS.filter((w) => !p.hasSights(w)).map((w) => w.id);
+
+  // put a rifle in hand and hold the right button
+  const rifle = p.WEAPONS.find((w) => w.id === "ak47");
+  p.game.slots = [{ id: "ak47", mag: rifle.mag, reserve: rifle.reserve }];
+  p.game.weapon = 0;
+  // the view eases rather than snapping, and this browser runs at a few
+  // frames a second, so wait for it to settle instead of guessing at a delay
+  const settle = async () => {
+    let last = -1;
+    let still = 0;
+    // several readings the same in a row, not one — at four frames a second
+    // two samples in a row land inside the same frame often enough to fool it
+    for (let i = 0; i < 120 && still < 5; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      still = Math.abs(p.camera.fov - last) < 0.01 ? still + 1 : 0;
+      last = p.camera.fov;
+    }
+    return p.camera.fov;
+  };
+
+  const hipFov = p.camera.fov;
+  p.setAiming(true);
+  const aimedFov = await settle();
+  const wasAiming = p.aiming();
+  p.setAiming(false);
+  const backFov = await settle();
+
+  // a shotgun must not budge however hard the button is held
+  const sg = p.WEAPONS.find((w) => w.id === "shotgun");
+  p.game.slots = [{ id: "shotgun", mag: sg.mag, reserve: sg.reserve }];
+  p.setAiming(true);
+  const shotgunFov = await settle();
+  p.setAiming(false);
+
+  return { startPoints, withSights, without, hipFov, aimedFov, backFov, shotgunFov, wasAiming };
+});
+
+step(`  ${sights.withSights.length} guns with sights, ${sights.without.length} without`);
+if (sights.startPoints !== 500) note(`a game starts with ${sights.startPoints} points, expected 500`);
+if (!(sights.aimedFov < sights.hipFov - 10)) note(`aiming barely moved the view (${sights.hipFov} → ${sights.aimedFov})`);
+if (!sights.wasAiming) note("holding the right button did not count as aiming");
+if (Math.abs(sights.backFov - sights.hipFov) > 0.5) note("the view did not come back after letting go");
+if (Math.abs(sights.shotgunFov - sights.hipFov) > 0.5) note("a shotgun aimed when it should not");
+for (const id of ["pistol", "magnum", "shotgun", "dbarrel", "auto12", "knife"]) {
+  if (sights.withSights.includes(id)) note(`${id} has sights and should not`);
+}
+for (const id of ["ak47", "m4", "scar", "mp5", "vector", "uzi", "sniper", "rpd", "dingo", "mg42", "rpg", "m32", "gl40", "raygun", "raygun2"]) {
+  if (!sights.withSights.includes(id)) note(`${id} has no sights and should have`);
+}
+
 // ── the last-resort panel must stay out of the way when nothing is wrong ──
 step("no crash panel on a healthy load");
 const crash = await page.evaluate(() => {

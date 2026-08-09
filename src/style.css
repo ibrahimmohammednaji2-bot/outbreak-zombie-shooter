@@ -1421,6 +1421,9 @@ button.ghost:hover {
 .tbtn.c1 { right: 34px; bottom: 236px; }
 .tbtn.c2 { right: 34px; bottom: 150px; }
 .tbtn.c3 { right: 244px; bottom: 150px; }
+.tbtn.c4 { right: 244px; bottom: 236px; }
+/* latched on, because a tablet has nothing to hold down */
+.tbtn.c4.on { background: rgba(74, 163, 255, 0.3); border-color: #4aa3ff; color: #4aa3ff; }
 
 /* utility column up the right edge */
 .tbtn.s1 { right: 34px; top: 120px; border-color: rgba(255, 201, 74, 0.75); color: #ffc94a; }
@@ -1571,3 +1574,13 @@ button.ghost:hover {
   margin: 0 0 14px;
 }
 .crash-ua { color: #7d8c80; font-size: 12px; }
+
+/* On the sights the gun is centred and doing the aiming, so the reticle
+   shrinks to a dot rather than sitting on top of the iron sights. */
+#crosshair.aiming span:nth-child(1),
+#crosshair.aiming span:nth-child(2),
+#crosshair.aiming span:nth-child(3),
+#crosshair.aiming span:nth-child(4) {
+  opacity: 0.25;
+  transform: scale(0.35);
+}

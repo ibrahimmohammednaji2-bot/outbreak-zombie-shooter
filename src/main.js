@@ -489,6 +489,31 @@ const weaponById = (id) => WEAPONS.find((w) => w.id === id) ?? WEAPONS[0];
  * What the mystery box can hand you — never a pistol, never the knife.
  * Repeats are the weighting: the Mark 2 appears once, so it is rare.
  */
+/* ── aiming down the sights ──────────────────────────────────── */
+
+/*
+ * A pistol is meant to be quick and a shotgun does not care where it is
+ * pointed, so neither gets sights. Everything else does, and how far it pulls
+ * the world in depends on what it is: a sniper brings it right up, a submachine
+ * gun barely at all.
+ */
+const NO_SIGHTS = new Set(["knife", "pistol", "magnum", "shotgun", "dbarrel", "auto12"]);
+const ZOOM = {
+  sniper: 0.34,
+  rpd: 0.6, dingo: 0.6, mg42: 0.6,
+  ak47: 0.62, m4: 0.62, scar: 0.62,
+  mp5: 0.74, vector: 0.74, uzi: 0.74,
+};
+const hasSights = (w) => !!w && !NO_SIGHTS.has(w.id);
+const zoomOf = (w) => (hasSights(w) ? (ZOOM[w.id] ?? 0.72) : 1);
+
+const AIM_SPREAD = 0.22; // what is left of the cone once you are on the sights
+const AIM_WALK = 0.55; // you move like this while looking down them
+
+const aim = { held: false, k: 0 }; // k eases 0 → 1 so nothing snaps
+const aiming = () => aim.k > 0.02 && hasSights(curWeapon());
+const setAiming = (on) => { aim.held = on; };
+
 const BOX_POOL = [
   "mp5", "mp5", "vector", "vector", "uzi", "uzi",
   "ak47", "ak47", "m4", "m4", "scar", "scar",
@@ -684,8 +709,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1018);
 scene.fog = new THREE.FogExp2(0x0a1018, 0.021);
 
+const HIP_FOV = 76;
 const camera = new THREE.PerspectiveCamera(
-  76,
+  HIP_FOV,
   innerWidth / innerHeight,
   0.1,
   260,
@@ -2516,7 +2542,8 @@ function shootOnce(w) {
     curSlot().mag = 0;
     return;
   }
-  game.recoil = powerActive("steady") ? 0 : w.recoil;
+  // shouldering it steadies the gun as well as narrowing the cone
+  game.recoil = powerActive("steady") ? 0 : w.recoil * (aiming() ? 0.55 : 1);
   sfx.shot(w);
 
   if (w.projectile) {
@@ -2534,7 +2561,9 @@ function shootOnce(w) {
   camera.getWorldDirection(camDir);
   muzzlePoint.copy(camera.position).addScaledVector(camDir, 0.6);
 
-  const spreadNow = powerActive("steady") ? 0 : w.spread;
+  const spreadNow = powerActive("steady")
+    ? 0
+    : w.spread * (aiming() ? AIM_SPREAD : 1);
   let hitAny = false;
 
   for (let p = 0; p < w.pellets; p++) {
@@ -2601,6 +2630,7 @@ const DROP_CHANCE = 0.04; // per kill
 const BONUS_TIME = 30;
 const DROP_LIFE = 22; // how long it waits on the ground
 
+const START_POINTS = 500; // enough to be doing something on the first wave
 const NUKE_POINTS = 400; // what clearing the map with one is worth, and no more
 
 const DROP_TYPES = {
@@ -3212,7 +3242,8 @@ function movePlayer(dt) {
     (crouching ? CROUCH_SPEED : running ? RUN_SPEED : WALK_SPEED) *
     (powerActive("sprint") ? powerAmount("sprint") : 1) *
     (player.slow > 0 ? 0.45 : 1) *
-    (hasPerk("stamin") ? 1.5 : 1);
+    (hasPerk("stamin") ? 1.5 : 1) *
+    (aiming() ? AIM_WALK : 1); // you walk it down while you are on the sights
 
   if (moving) wish.normalize().multiplyScalar(speed);
 
@@ -3718,16 +3749,34 @@ function animate() {
     }
   }
 
+  /*
+   * Coming onto the sights and off them again. You cannot aim what you are
+   * reloading, and a gun without sights never leaves the hip however hard the
+   * button is held.
+   */
+  const wantAim = aim.held && hasSights(curWeapon()) && game.reloadTimer <= 0 && !game.over;
+  aim.k = THREE.MathUtils.clamp(aim.k + (wantAim ? dt * 7 : -dt * 9), 0, 1);
+
+  const ease = aim.k * aim.k * (3 - 2 * aim.k); // gentle at both ends
+  const wantFov = HIP_FOV * (1 - ease * (1 - zoomOf(curWeapon())));
+  if (Math.abs(camera.fov - wantFov) > 0.01) {
+    camera.fov = wantFov;
+    camera.updateProjectionMatrix();
+  }
+  ui.crosshair.classList.toggle("aiming", ease > 0.5);
+  if (touchMode) $("t-aim").classList.toggle("on", aim.held);
+
   // viewmodel sway + recoil (runs even when paused so it settles)
   game.recoil = Math.max(0, game.recoil - dt * 3.4);
   const vm = viewmodels[curSlot().id];
   const reloadDip = game.reloadTimer > 0 ? 0.16 : 0;
+  // the gun comes in to the middle and back towards your eye as you sight it
   vm.position.set(
-    0.26,
-    -0.24 - reloadDip + Math.sin(player.bob) * 0.008,
-    -0.5 + game.recoil * 0.9,
+    0.26 * (1 - ease),
+    (-0.24 - reloadDip + Math.sin(player.bob) * 0.008) * (1 - ease * 0.7) - ease * 0.035,
+    -0.5 + game.recoil * 0.9 + ease * 0.16,
   );
-  vm.rotation.set(game.recoil * 3.2, game.reloadTimer > 0 ? 0.45 : 0, 0);
+  vm.rotation.set(game.recoil * 3.2 * (1 - ease * 0.5), game.reloadTimer > 0 ? 0.45 : 0, 0);
   muzzleLight.intensity *= 0.72;
 
   // effects
@@ -3810,19 +3859,28 @@ addEventListener("keyup", (e) => {
 addEventListener("pointerdown", (e) => {
   // on a tablet the FIRE button fires; a tap on the screen is for looking
   if (touchMode || e.pointerType === "touch") return;
-  if (e.button !== 0 || !game.running || game.over) return;
+  if (!game.running || game.over) return;
+  if (e.button === 2) return setAiming(true); // right button shoulders the gun
+  if (e.button !== 0) return;
   game.triggerHeld = true;
   game.queued++; // bank it now so the loop can never miss the click
+});
+
+// otherwise the right button opens the browser's own menu over the game
+addEventListener("contextmenu", (e) => {
+  if (game.running && !game.over) e.preventDefault();
 });
 
 const releaseTrigger = () => {
   game.triggerHeld = false;
   game.queued = 0;
+  setAiming(false);
 };
 
 addEventListener("pointerup", (e) => {
   if (touchMode || e.pointerType === "touch") return;
   if (e.button === 0) releaseTrigger();
+  if (e.button === 2) setAiming(false);
 });
 
 // Every way a button release can go missing: the pointer leaving the window,
@@ -3836,7 +3894,8 @@ document.addEventListener("pointerlockchange", () => {
 });
 // self-heal: a mouse move with no buttons down means nothing is held
 addEventListener("pointermove", (e) => {
-  if (e.pointerType === "mouse" && e.buttons === 0 && game.triggerHeld) releaseTrigger();
+  if (e.pointerType !== "mouse" || e.buttons !== 0) return;
+  if (game.triggerHeld || aim.held) releaseTrigger(); // nothing is down after all
 });
 
 addEventListener("blur", () => {
@@ -4561,7 +4620,7 @@ function resetGame() {
     intermission: 0,
     weapon: 0,
     slots: startingSlots(),
-    points: 0,
+    points: START_POINTS,
     burstLeft: 0,
     burstTimer: 0,
     cooldown: 0,
@@ -5637,6 +5696,8 @@ $("touch").addEventListener("touchstart", (e) => {
     player.grounded = false;
   }
   if (what === "reload") startReload();
+  // no right button on a tablet, so it latches instead of being held
+  if (what === "aim") setAiming(!aim.held);
   if (what === "crouch") crouchHeld = !crouchHeld;
   if (what === "power") activatePower();
   if (what === "lethal") throwEquipment(true);
@@ -5837,10 +5898,18 @@ if (import.meta.env.DEV) {
     lureActive,
     MAPS,
     WEAPONS,
+    aim,
+    aiming,
+    setAiming,
+    hasSights,
+    zoomOf,
+    camera,
+    START_POINTS,
     fire,
     activatePower,
     startDeathmatch,
     toLobby,
+    beginPlay,
   };
 }
 
