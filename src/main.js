@@ -256,6 +256,25 @@ const WEAPONS = [
     tone: 300,
   },
   {
+    // Two barrels, both of them at once, and then a long wait. Off the wall
+    // for 500 — cheap, brutal up close, useless past a room's length.
+    id: "dbarrel",
+    name: "Double Barrel",
+    damage: 27,
+    headMult: 2,
+    rpm: 0.55,
+    mag: 2,
+    reserve: 28,
+    pellets: 12,
+    spread: 0.105,
+    auto: false,
+    reload: 2.4,
+    recoil: 0.22,
+    pickup: 4,
+    volume: 0.9,
+    tone: 240,
+  },
+  {
     id: "auto12",
     name: "Auto Shotgun",
     damage: 14,
@@ -907,7 +926,13 @@ function ruinBlock(x, z, seed) {
  * different palette, different walls breached, one or two storeys, and its own
  * furniture arrangement. No two in the game are alike.
  */
-function house(x, z, seed = 1, boxSink = null) {
+/*
+ * `markSink` collects the spots inside this house that the game wants to put
+ * something on later — a perk machine, a gun on the wall, a doorway worth
+ * charging for. The house knows where its rooms and its stairs ended up; the
+ * placement code does not, so it asks.
+ */
+function house(x, z, seed = 1, boxSink = null, markSink = null) {
   const rnd = rngFrom(seed);
   const HW = 16.4 + rnd() * 5.2;
   const HD = 16.4 + rnd() * 5.2;
@@ -1043,6 +1068,27 @@ function house(x, z, seed = 1, boxSink = null) {
 
     const rise = (FLOOR + 0.35) / 12;
     const runStart = HD - 1.2;
+
+    if (markSink) {
+      // Speed Cola in the living room, Double Tap through the partition in the
+      // dining room, so the doorway between them is worth charging for.
+      markSink.push({ kind: "perk", id: "speed", x: x - HW * 0.58, z: z + HD * 0.62 });
+      markSink.push({ kind: "perk", id: "dtap", x: x + HW * 0.55, z: z + HD * 0.6 });
+
+      // the gun on the wall, hung on the inside of the west wall
+      markSink.push({ kind: "wallbuy", x: x - HW + 0.75, z: z + HD * 0.15, face: 0 });
+
+      // the partition doorway — the only way through to Double Tap
+      markSink.push({
+        kind: "door", cost: 750, x: x - HW * 0.12, z, hw: 0.25, hd: 1.6, h: H,
+      });
+
+      // and the foot of the stairs, which is the only way up to the box
+      markSink.push({
+        kind: "door", cost: 1250, x: x + side * (HW - 1.5), z: z + runStart + 1.15,
+        hw: 1.35, hd: 0.3, h: H,
+      });
+    }
     const tread = (runStart - stairTopZ) / 11;
     for (let i = 0; i < 12; i++) {
       p.push(
@@ -1140,6 +1186,11 @@ const CRATE = 0x5a4632;
 const forestBoxes = [];
 const cityBoxes = [];
 
+// Spots the main house on each map reports back: where its rooms, its wall and
+// its doorways ended up, so perks and paid doors land somewhere sensible.
+const forestMarks = [];
+const cityMarks = [];
+
 const MAPS = [
   {
     id: "forest",
@@ -1152,9 +1203,10 @@ const MAPS = [
     light: 0.85,
     start: [0, 22],
     boxes: forestBoxes,
+    marks: forestMarks,
     fires: [[-22, -20], [24, 18], [0, 30], [-26, 22]],
     props: [
-      ...house(0, 0, 91, forestBoxes),
+      ...house(0, 0, 91, forestBoxes, forestMarks),
 
       // Woodland grows in clumps with clearings between, not on a grid.
       // Each cluster is a handful of trees of varying size and shade.
@@ -1224,6 +1276,7 @@ const MAPS = [
     light: 1,
     start: [0, 62],
     boxes: cityBoxes,
+    marks: cityMarks,
     fires: [
       [0, 0], [-40, -40], [40, 40], [-46, 34], [46, -34],
       [0, -58], [-64, 8], [64, -8], [-20, 62], [24, -66],
@@ -1243,7 +1296,7 @@ const MAPS = [
       ...ruinBlock(-58, 62, 151),
       ...ruinBlock(58, -62, 163),
       // houses filling the blocks between them
-      ...house(-30, 4, 3, cityBoxes),
+      ...house(-30, 4, 3, cityBoxes, cityMarks),
       ...house(34, 12, 7, cityBoxes),
       ...house(-6, -50, 13),
       ...house(18, 54, 19),
@@ -1633,6 +1686,11 @@ function buildViewmodel(id) {
   } else if (id === "pistol" || id === "magnum") {
     g.add(part(0.09, 0.1, 0.36, 0, 0, -0.12, gunMetal)); // slide
     g.add(part(0.08, 0.2, 0.1, 0, -0.14, 0.03, gunGrip)); // grip
+  } else if (id === "dbarrel") {
+    g.add(part(0.06, 0.07, 0.86, -0.035, 0.01, -0.34, gunMetal)); // left barrel
+    g.add(part(0.06, 0.07, 0.86, 0.035, 0.01, -0.34, gunMetal)); // right barrel
+    g.add(part(0.1, 0.1, 0.2, 0, -0.02, 0.12, gunGrip)); // breech
+    g.add(part(0.08, 0.19, 0.1, 0, -0.14, 0.16, gunGrip)); // grip
   } else if (id === "rifle" || id === "smg" || id === "lmg" || id === "sniper") {
     g.add(part(0.08, 0.1, 0.72, 0, 0, -0.28, gunMetal)); // receiver
     g.add(part(0.05, 0.05, 0.3, 0, 0.01, -0.78, gunMetal)); // barrel
@@ -2006,7 +2064,7 @@ function spawnZombie(wave) {
 
 const PERKS_FOR_SALE = [
   { id: "jugg",   name: "Juggernaut", cost: 2500, colour: 0xd64545, desc: "Double health" },
-  { id: "speed",  name: "Speed Cola", cost: 3000, colour: 0x4aa3ff, desc: "Reload twice as fast" },
+  { id: "speed",  name: "Speed Cola", cost: 2000, colour: 0x4aa3ff, desc: "Reload twice as fast" },
   { id: "dtap",   name: "Double Tap", cost: 2000, colour: 0xffc94a, desc: "Double damage" },
   { id: "stamin", name: "Stamin-Up", cost: 2000, colour: 0x5fd77a, desc: "Move half again as fast" },
 ];
@@ -2016,52 +2074,236 @@ const ownedPerks = new Set();
 
 const hasPerk = (id) => ownedPerks.has(id);
 
+/* ── paid ways through, and guns on the wall ─────────────────── */
+
 /*
- * Somewhere clear to stand a machine. Dropping one on a fixed mark buries it
- * in a tree or inside a wall on half the maps, so walk out along the spoke
- * until there is room for it and for whoever comes to drink from it.
+ * A barrier is a heap of boards across a doorway that you clear with points.
+ * It is a real obstacle while it stands — the same box everything else in the
+ * world collides with — so buying one means taking it back out of the world
+ * and re-indexing the grid. That costs a millisecond, once, on a keypress.
  */
-const spotScratch = new THREE.Vector3();
-function clearSpot(angle) {
-  for (let r = HALF * 0.5; r > 6; r -= 2.5) {
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    spotScratch.set(x, 0, z);
-    let blocked = false;
-    for (const o of obstacles) {
-      if (o.top <= STEP) continue; // scenery you walk over
-      if (overlapsBox(spotScratch, 1.6, o)) { blocked = true; break; }
-    }
-    if (!blocked) return [x, z];
-  }
-  // nowhere is clear — take the spoke's end and let pushOut sort the player out
-  return [Math.cos(angle) * HALF * 0.5, Math.sin(angle) * HALF * 0.5];
+const barriers = [];
+const wallBuys = [];
+
+const WALL_GUN = "dbarrel"; // the double barrel, hung inside the house
+const WALL_GUN_COST = 500;
+
+function addBarrier(x, z, y, hw, hd, h, cost, angle = 0) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x6a533a });
+  const mesh = new THREE.Mesh(UNIT_BOX, mat);
+  mesh.scale.set(hw * 2, h, hd * 2);
+  mesh.position.set(x, y + h / 2, z);
+  mesh.rotation.y = -angle;
+  mesh.castShadow = mesh.receiveShadow = true;
+  mapGroup.add(mesh);
+
+  const obs = {
+    x, z, hw, hd, bottom: y, top: y + h,
+    cos: Math.cos(angle), sin: Math.sin(angle),
+  };
+  obstacles.push(obs);
+  barriers.push({ x, z, y, cost, mesh, mat, obs, bought: false });
 }
 
-/** Stand them around the arena, well apart, on ground you can reach. */
+function buyBarrier(b) {
+  if (b.bought) return;
+  if (game.points < b.cost) {
+    sfx.dryFire();
+    toast(`NEED ${b.cost - game.points} MORE POINTS`);
+    return;
+  }
+  game.points -= b.cost;
+  b.bought = true;
+
+  mapGroup.remove(b.mesh);
+  b.mat.dispose();
+  const i = obstacles.indexOf(b.obs);
+  if (i !== -1) obstacles.splice(i, 1);
+  buildGrid(); // the world changed shape; the lookup has to agree
+
+  sfx.unlock();
+  toast("CLEARED");
+  syncHud();
+}
+
+function addWallBuy(x, z, weaponId, cost) {
+  const w = weaponById(weaponId);
+  const mat = new THREE.MeshLambertMaterial({ color: 0x8a6a3a, emissive: 0x2a1c06 });
+  const mesh = new THREE.Mesh(UNIT_BOX, mat);
+  mesh.scale.set(0.25, 0.45, 1.9);
+  mesh.position.set(x, 1.5, z);
+  mapGroup.add(mesh);
+
+  const glow = new THREE.PointLight(0xffb43c, 1.6, 7, 2);
+  glow.position.set(x, 1.6, z);
+  mapGroup.add(glow);
+
+  wallBuys.push({ x, z, y: 0, weaponId, cost, name: w?.name ?? weaponId, mesh, mat, glow });
+}
+
+/** Buy the gun off the wall, or top it up if you already carry it. */
+function buyWallGun(wb) {
+  const w = weaponById(wb.weaponId);
+  const held = game.slots.find((s) => s.id === wb.weaponId);
+  const price = held ? Math.round(wb.cost * 0.5) : wb.cost;
+
+  if (game.points < price) {
+    sfx.dryFire();
+    toast(`NEED ${price - game.points} MORE POINTS`);
+    return;
+  }
+  game.points -= price;
+
+  if (held) {
+    held.mag = w.mag;
+    held.reserve = w.reserve;
+    toast(`${w.name.toUpperCase()} — REFILLED`);
+  } else {
+    // it takes the gun in your hand, never the knife
+    const slot = game.slots[game.weapon]?.id === "knife" ? 0 : game.weapon;
+    for (const vm of Object.values(viewmodels)) vm.visible = false;
+    game.slots[slot] = { id: wb.weaponId, mag: w.mag, reserve: w.reserve };
+    game.weapon = slot;
+    viewmodels[wb.weaponId].visible = true;
+    game.reloadTimer = 0;
+    toast(w.name.toUpperCase());
+    renderLoadout();
+  }
+  sfx.swap();
+  syncHud();
+}
+
+const spotScratch = new THREE.Vector3();
+
+/** Is there room to stand something of this size here? */
+function spotIsClear(x, z, radius) {
+  spotScratch.set(x, 0, z);
+  for (const o of obstacles) {
+    if (o.top <= STEP) continue; // scenery you walk over
+    if (o.bottom > 1.5) continue; // an upper floor is not in the way down here
+    if (overlapsBox(spotScratch, radius, o)) return false;
+  }
+  return true;
+}
+
+/*
+ * The nearest clear spot to where something wants to go. A machine dropped on
+ * a fixed mark ends up inside a sofa or halfway through a wall, because the
+ * rooms are generated and the mark is not.
+ */
+function clearNear(x, z, radius = 1.5, reach = 5) {
+  if (spotIsClear(x, z, radius)) return [x, z];
+  for (let r = 1; r <= reach; r += 1) {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const cx = x + Math.cos(a) * r;
+      const cz = z + Math.sin(a) * r;
+      if (spotIsClear(cx, cz, radius)) return [cx, cz];
+    }
+  }
+  return [x, z]; // nowhere better; at least it is where it was asked for
+}
+
+/** Somewhere clear along a spoke out from the middle. */
+function clearSpot(angle, from = HALF * 0.5) {
+  for (let r = from; r > 6; r -= 2.5) {
+    const x = Math.cos(angle) * r;
+    const z = Math.sin(angle) * r;
+    if (spotIsClear(x, z, 1.6)) return [x, z];
+  }
+  return [Math.cos(angle) * from, Math.sin(angle) * from];
+}
+
+function addPerkMachine(perk, x, z, y = 0) {
+  const body = new THREE.Mesh(
+    UNIT_BOX,
+    new THREE.MeshLambertMaterial({ color: perk.colour, emissive: perk.colour, emissiveIntensity: 0.25 }),
+  );
+  body.scale.set(1.3, 2.1, 1);
+  body.position.set(x, y + 1.05, z);
+  body.castShadow = true;
+  mapGroup.add(body);
+
+  const glow = new THREE.PointLight(perk.colour, 2.4, 12, 2);
+  glow.position.set(x, y + 2.4, z);
+  mapGroup.add(glow);
+
+  obstacles.push({ x, z, hw: 0.7, hd: 0.55, bottom: y, top: y + 2.1, cos: 1, sin: 0 });
+  perkMachines.push({ perk, x, z, y, glow });
+}
+
+/*
+ * Where each one lives.
+ *
+ *   Speed Cola and Double Tap  — inside the house, in different rooms
+ *   Juggernaut                 — a corner of the map, walled in, drawn fresh
+ *                                each game so you cannot learn the way
+ *   Stamin-Up                  — out among the trees, somewhere different
+ *                                every time
+ */
 function placePerkMachines() {
   perkMachines.length = 0;
+  barriers.length = 0;
+  wallBuys.length = 0;
   if (game.dm) return; // a free-for-all has no points and no perks
-  PERKS_FOR_SALE.forEach((perk, i) => {
-    const a = (i / PERKS_FOR_SALE.length) * Math.PI * 2 + 0.6;
-    const [x, z] = clearSpot(a);
 
-    const body = new THREE.Mesh(
-      UNIT_BOX,
-      new THREE.MeshLambertMaterial({ color: perk.colour, emissive: perk.colour, emissiveIntensity: 0.25 }),
-    );
-    body.scale.set(1.3, 2.1, 1);
-    body.position.set(x, 1.05, z);
-    body.castShadow = true;
-    mapGroup.add(body);
+  const perk = (id) => PERKS_FOR_SALE.find((p) => p.id === id);
+  const marks = mapDef.marks ?? [];
 
-    const glow = new THREE.PointLight(perk.colour, 2.4, 12, 2);
-    glow.position.set(x, 2.4, z);
-    mapGroup.add(glow);
+  // ── the two in the house, and the doors that gate them ──
+  for (const m of marks) {
+    if (m.kind === "perk") {
+      const [px, pz] = clearNear(m.x, m.z, 1.2, 4);
+      addPerkMachine(perk(m.id), px, pz);
+    }
+    if (m.kind === "door") addBarrier(m.x, m.z, 0, m.hw, m.hd, m.h, m.cost);
+    if (m.kind === "wallbuy") addWallBuy(m.x, m.z, WALL_GUN, WALL_GUN_COST);
+  }
 
-    obstacles.push({ x, z, hw: 0.7, hd: 0.55, bottom: 0, top: 2.1, cos: 1, sin: 0 });
-    perkMachines.push({ perk, x, z, glow });
-  });
+  // ── Juggernaut, in one of the four corners, behind a thousand points ──
+  const corner = (Math.random() * 4) | 0;
+  const ca = Math.PI / 4 + (corner * Math.PI) / 2;
+  const [jx, jz] = clearSpot(ca, HALF * 0.78);
+  addPerkMachine(perk("jugg"), jx, jz);
+  walledIn(jx, jz, 1000);
+
+  // ── Stamin-Up, loose in the woods ──
+  const sa = Math.random() * Math.PI * 2;
+  const [sx, sz] = clearSpot(sa, HALF * 0.62);
+  addPerkMachine(perk("stamin"), sx, sz);
+}
+
+/*
+ * Three walls of heaped rubble and a barred way in, so the machine inside is
+ * only reachable by paying. The gap faces the middle of the map — you should
+ * be able to see what you are paying for before you pay.
+ */
+function walledIn(x, z, cost) {
+  const R = 4.2;
+  const inward = Math.atan2(-z, -x); // back towards the centre
+  const wall = 0x6f665b;
+
+  for (let i = 0; i < 4; i++) {
+    const a = inward + (i * Math.PI) / 2;
+    const wx = x + Math.cos(a) * R;
+    const wz = z + Math.sin(a) * R;
+    const along = a + Math.PI / 2;
+
+    if (i === 0) {
+      addBarrier(wx, wz, 0, R * 0.95, 0.4, 2.6, cost, along);
+      continue;
+    }
+    const mesh = new THREE.Mesh(UNIT_BOX, new THREE.MeshLambertMaterial({ color: wall }));
+    mesh.scale.set(R * 1.9, 2.6, 0.8);
+    mesh.position.set(wx, 1.3, wz);
+    mesh.rotation.y = -along;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mapGroup.add(mesh);
+    obstacles.push({
+      x: wx, z: wz, hw: R * 0.95, hd: 0.4, bottom: 0, top: 2.6,
+      cos: Math.cos(along), sin: Math.sin(along),
+    });
+  }
 }
 /** Take a body out of the shootable set without removing it from the world. */
 function unregisterZombie(z) {
@@ -2239,7 +2481,7 @@ function fire() {
     return;
   }
 
-  game.cooldown = w.rpm;
+  game.cooldown = w.rpm / (powerActive("frenzy") ? powerAmount("frenzy") : 1);
   shootOnce(w);
 
   // burst weapons keep firing on their own for the rest of the burst
@@ -2340,10 +2582,13 @@ const DROP_CHANCE = 0.04; // per kill
 const BONUS_TIME = 30;
 const DROP_LIFE = 22; // how long it waits on the ground
 
+const NUKE_POINTS = 400; // what clearing the map with one is worth, and no more
+
 const DROP_TYPES = {
   points: { label: "DOUBLE POINTS", colour: 0xffc94a },
   instakill: { label: "INSTANT KILL", colour: 0xff4a4a },
   maxammo: { label: "MAX AMMO", colour: 0x4aa3ff },
+  nuke: { label: "NUKE", colour: 0x7cf25a },
 };
 
 const drops = [];
@@ -2380,6 +2625,9 @@ function collect(d) {
       s.reserve = w.reserve;
     }
     game.reloadTimer = 0;
+  } else if (d.kind === "nuke") {
+    nukeTheMap(); // says its own piece
+    return;
   } else {
     bonus[d.kind] = game.time + BONUS_TIME;
   }
@@ -2529,27 +2777,32 @@ function updateProjectiles(dt) {
 
 let nearBox = null;
 
-/** The closest box you could actually reach, or null. */
-function boxInReach() {
-  for (const b of mysteryBoxes) {
-    const dx = b.x - player.pos.x;
-    const dz = b.z - player.pos.z;
-    if (dx * dx + dz * dz < 9 && Math.abs(b.y - player.pos.y) < 2) return b;
-  }
-  return null;
-}
-
-/** The nearest perk machine you are standing at, if any. */
-function perkInReach() {
-  for (const m of perkMachines) {
-    const dx = m.x - player.pos.x;
-    const dz = m.z - player.pos.z;
-    if (dx * dx + dz * dz < 9 && Math.abs(player.pos.y) < 2.5) return m;
-  }
-  return null;
-}
-
 let nearPerk = null;
+let nearThing = null; // whatever the F key would act on right now
+
+/*
+ * Everything you can walk up to and buy, nearest first: the box, a perk
+ * machine, a boarded doorway, a gun on the wall. One prompt, one key.
+ */
+function thingInReach() {
+  let best = null;
+  const consider = (t, x, z, y, reach) => {
+    const dx = x - player.pos.x;
+    const dz = z - player.pos.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 > reach * reach) return;
+    if (Math.abs(y - player.pos.y) > 2.4) return;
+    if (!best || d2 < best.d2) best = { ...t, d2 };
+  };
+
+  for (const b of mysteryBoxes) consider({ kind: "box", box: b }, b.x, b.z, b.y, 3);
+  for (const m of perkMachines) consider({ kind: "perk", machine: m }, m.x, m.z, m.y ?? 0, 3);
+  for (const w of wallBuys) consider({ kind: "wall", wall: w }, w.x, w.z, w.y, 3);
+  for (const b of barriers) {
+    if (!b.bought) consider({ kind: "door", barrier: b }, b.x, b.z, b.y, 3.4);
+  }
+  return best;
+}
 
 function buyPerk(perk) {
   if (hasPerk(perk.id)) {
@@ -2575,32 +2828,55 @@ function buyPerk(perk) {
 
 function updateBoxPrompt() {
   const live = game.running && !game.over;
-  nearBox = live ? boxInReach() : null;
-  nearPerk = live && !nearBox ? perkInReach() : null;
-  const el = ui.prompt;
+  nearThing = live ? thingInReach() : null;
+  // kept for anything still reading them
+  nearBox = nearThing?.kind === "box" ? nearThing.box : null;
+  nearPerk = nearThing?.kind === "perk" ? nearThing.machine : null;
 
-  if (!nearBox && !nearPerk) {
+  const el = ui.prompt;
+  if (!nearThing) {
     el.classList.add("hidden");
     return;
   }
 
-  const cost = nearBox ? BOX_COST : nearPerk.perk.cost;
-  const owned = nearPerk && hasPerk(nearPerk.perk.id);
-  const affordable = game.points >= cost;
+  let cost = 0;
+  let line = "";
+  let owned = false;
 
+  if (nearThing.kind === "box") {
+    cost = BOX_COST;
+    line = `MYSTERY BOX — ${cost} POINTS`;
+  } else if (nearThing.kind === "perk") {
+    const p = nearThing.machine.perk;
+    cost = p.cost;
+    owned = hasPerk(p.id);
+    line = owned
+      ? `${p.name.toUpperCase()} — ALREADY YOURS`
+      : `${p.name.toUpperCase()} — ${cost} POINTS · ${p.desc}`;
+  } else if (nearThing.kind === "door") {
+    cost = nearThing.barrier.cost;
+    line = `CLEAR THE WAY — ${cost} POINTS`;
+  } else {
+    const wb = nearThing.wall;
+    const held = game.slots.some((s) => s.id === wb.weaponId);
+    cost = held ? Math.round(wb.cost * 0.5) : wb.cost;
+    line = `${wb.name.toUpperCase()} — ${cost} POINTS${held ? " · AMMO" : ""}`;
+  }
+
+  const affordable = game.points >= cost;
   el.classList.remove("hidden");
   el.classList.toggle("poor", !owned && !affordable);
 
-  if (owned) el.innerHTML = `<b>✓</b>${nearPerk.perk.name.toUpperCase()} — ALREADY YOURS`;
-  else if (affordable)
-    el.innerHTML = nearBox
-      ? `<b>F</b>MYSTERY BOX — ${BOX_COST} POINTS`
-      : `<b>F</b>${nearPerk.perk.name.toUpperCase()} — ${cost} POINTS · ${nearPerk.perk.desc}`;
+  if (owned) el.innerHTML = `<b>✓</b>${line}`;
+  else if (affordable) el.innerHTML = `<b>F</b>${line}`;
   else el.innerHTML = `<b>F</b>NEED ${cost - game.points} MORE POINTS`;
 }
 
 function useBox() {
-  if (nearPerk && !nearBox) return buyPerk(nearPerk.perk);
+  if (!nearThing) return;
+  if (nearThing.kind === "perk") return buyPerk(nearThing.machine.perk);
+  if (nearThing.kind === "door") return buyBarrier(nearThing.barrier);
+  if (nearThing.kind === "wall") return buyWallGun(nearThing.wall);
   if (!nearBox) return;
   if (game.points < BOX_COST) {
     sfx.dryFire();
@@ -2664,7 +2940,7 @@ function swing(w) {
 
 function killZombie(z) {
   if (z.dying > 0) return;
-  if (powerActive("vamp")) player.hp = Math.min(150, player.hp + power.amount);
+  if (powerActive("vamp")) player.hp = Math.min(player.maxHp + 50, player.hp + powerAmount("vamp"));
   z.dying = 0.001;
   addPoints(z.knifed ? PTS_KNIFE_KILL : PTS_KILL);
   // A Reviver is only down. It pays out — the kill, the drop, the ammo —
@@ -2692,7 +2968,7 @@ function damageZombie(z, amount, head, dir, point) {
     return;
   }
   if (z.dying > 0) return; // a body cannot be killed twice
-  z.hp -= bonusActive("instakill") ? z.maxHp : amount * (hasPerk("dtap") ? 2 : 1) * (powerActive("damage") ? power.amount : 1);
+  z.hp -= bonusActive("instakill") ? z.maxHp : amount * (hasPerk("dtap") ? 2 : 1) * (powerActive("damage") ? powerAmount("damage") : 1);
   z.flash = 1;
   spatter(point, dir, head ? 14 : 7);
   head ? sfx.headshot() : sfx.flesh();
@@ -2702,14 +2978,20 @@ function damageZombie(z, amount, head, dir, point) {
 /* ── skin powers ─────────────────────────────────────────────── */
 
 const POWER_COOLDOWN = 60; // seconds between uses, not once a wave
-const power = { id: null, amount: 0, until: 0, readyAt: 0 };
+
+/*
+ * A power is several effects at once — two on the lower rarities, three at the
+ * top — so what is running is a set, not a single id. `live` maps each effect
+ * to its number for as long as the power lasts.
+ */
+const power = { live: {}, until: 0, readyAt: 0 };
 const powerReady = () => game.time >= power.readyAt;
 
-const powerActive = (id) => power.id === id && game.time < power.until;
+const powerActive = (id) => game.time < power.until && id in power.live;
+const powerAmount = (id) => power.live[id] ?? 0;
 
 function resetPower() {
-  power.id = null;
-  power.amount = 0;
+  power.live = {};
   power.until = 0;
   power.readyAt = 0;
   updatePowerHud();
@@ -2753,32 +3035,84 @@ function activatePower() {
   }
 
   power.readyAt = game.time + POWER_COOLDOWN;
-  power.id = p.effect;
-  power.amount = p.amount;
+  power.live = {};
+  for (const part of p.parts) power.live[part.effect] = part.amount;
   power.until = game.time + p.dur;
 
-  if (p.effect === "heal") player.hp = Math.min(150, player.hp + p.amount);
-
-  if (p.effect === "shock") {
-    for (const z of zombies) {
-      if (z.dying > 0) continue;
-      const dx = z.group.position.x - player.pos.x;
-      const dz = z.group.position.z - player.pos.z;
-      const d = Math.max(0.4, Math.hypot(dx, dz));
-      if (d > 14) continue;
-      z.hp -= p.amount * (1 - d / 14);
-      z.flash = 1;
-      z.group.position.x += (dx / d) * 5;
-      z.group.position.z += (dz / d) * 5;
-      spatter(z.group.position, new THREE.Vector3(0, 1, 0), 6);
-      if (z.hp <= 0) killZombie(z);
-    }
-  }
+  for (const part of p.parts) applyPowerPart(part);
 
   sfx.unlock();
   toast(p.name.toUpperCase());
   syncHud();
   updatePowerHud();
+}
+
+/** Everything a power does the moment it is pressed. */
+function applyPowerPart(part) {
+  const { effect, amount } = part;
+
+  if (effect === "heal") player.hp = Math.min(player.maxHp + 50, player.hp + amount);
+
+  if (effect === "refill") {
+    for (const s of game.slots) {
+      const w = weaponById(s.id);
+      s.mag = w.mag;
+      s.reserve = w.reserve;
+    }
+    game.reloadTimer = 0;
+  }
+
+  if (effect === "points") bonus.points = Math.max(bonus.points, game.time + part.dur);
+
+  if (effect === "decoy") {
+    lure.x = player.pos.x;
+    lure.z = player.pos.z;
+    lure.until = game.time + part.dur;
+  }
+
+  // A shove, and a much heavier one that reaches further.
+  if (effect === "shock" || effect === "blast") {
+    const range = effect === "blast" ? 20 : 14;
+    const shove = effect === "blast" ? 9 : 5;
+    for (const z of [...zombies]) {
+      if (z.dying > 0) continue;
+      const dx = z.group.position.x - player.pos.x;
+      const dz = z.group.position.z - player.pos.z;
+      const d = Math.max(0.4, Math.hypot(dx, dz));
+      if (d > range) continue;
+      z.hp -= amount * (1 - d / range);
+      z.flash = 1;
+      z.group.position.x += (dx / d) * shove;
+      z.group.position.z += (dz / d) * shove;
+      spatter(z.group.position, new THREE.Vector3(0, 1, 0), effect === "blast" ? 10 : 6);
+      if (z.hp <= 0) killZombie(z);
+    }
+    if (effect === "blast") sfx.explosion();
+  }
+
+  if (effect === "nuke") nukeTheMap();
+}
+
+/*
+ * Everything on the map dies at once. Worth four hundred points and no more,
+ * however many were standing — it buys you the room, not the score.
+ */
+function nukeTheMap() {
+  let killed = 0;
+  const before = game.points;
+  for (const z of [...zombies]) {
+    if (z.dying > 0 && !(z.kind === "reviver" && !z.finished)) continue;
+    if (z.kind === "reviver") z.finished = true;
+    killZombie(z);
+    killed++;
+  }
+  game.points = before + NUKE_POINTS;
+  ui.flash.style.opacity = "0.8";
+  setTimeout(() => (ui.flash.style.opacity = "0"), 220);
+  sfx.explosion();
+  banner("NUKE", 1800);
+  toast(`${killed} DOWN · +${NUKE_POINTS} POINTS`);
+  syncHud();
 }
 
 function startReload() {
@@ -2857,7 +3191,7 @@ function movePlayer(dt) {
   const running = !crouching && isRunning;
   const speed =
     (crouching ? CROUCH_SPEED : running ? RUN_SPEED : WALK_SPEED) *
-    (powerActive("sprint") ? power.amount : 1) *
+    (powerActive("sprint") ? powerAmount("sprint") : 1) *
     (player.slow > 0 ? 0.45 : 1) *
     (hasPerk("stamin") ? 1.5 : 1);
 
@@ -2919,7 +3253,7 @@ const sep = new THREE.Vector3();
 
 function updateZombies(dt) {
   // Cryo Burst stops them dead; Tar Field slows the whole horde.
-  const hordeK = powerActive("freeze") ? 0 : powerActive("slowfield") ? power.amount : 1;
+  const hordeK = powerActive("freeze") ? 0 : powerActive("slowfield") ? powerAmount("slowfield") : 1;
 
   for (let i = zombies.length - 1; i >= 0; i--) {
     const z = zombies[i];
@@ -2990,17 +3324,6 @@ function updateZombies(dt) {
     }
 
     // Contact kill: anything that reaches you dies where it stands.
-    if (powerActive("touch")) {
-      const tx = g.position.x - player.pos.x;
-      const tz = g.position.z - player.pos.z;
-      if (tx * tx + tz * tz < 3.4 && Math.abs(z.y - player.pos.y) < 1.8) {
-        spatter(g.position, new THREE.Vector3(0, 1, 0), 14);
-        sfx.flesh();
-        killZombie(z);
-        continue;
-      }
-    }
-
     // Ghost: they lose you entirely and wander off on their own bearing.
     const hidden = powerActive("cloak");
     toPlayer.set(
@@ -3115,6 +3438,13 @@ function updateZombies(dt) {
       if (z.attackCd <= 0 && hordeK > 0 && Math.abs(z.y - player.pos.y) < 1.6) {
         z.attackCd = 1.05;
         hurtPlayer(z.damage, ZOMBIE_TYPES[z.kind]?.label ?? "a zombie");
+        // Thorns: whatever reaches you pays for it
+        if (powerActive("thorns")) {
+          z.hp -= powerAmount("thorns");
+          z.flash = 1;
+          spatter(g.position, new THREE.Vector3(0, 1, 0), 8);
+          if (z.hp <= 0) killZombie(z);
+        }
       }
     }
 
@@ -3245,9 +3575,12 @@ function updateZombies(dt) {
 }
 
 function hurtPlayer(amount, by) {
-  if (powerActive("shield")) return; // Bulwark
+  if (powerActive("shield")) return; // Bulwark: nothing gets through at all
   if (!player.alive) return;
   if (game.over) return;
+  // Plating takes its share off whatever is left
+  if (powerActive("armour")) amount *= 1 - powerAmount("armour");
+  if (amount <= 0) return;
   if (by) game.killedBy = by; // whoever lands the last blow gets named
   player.hp -= amount;
   player.lastHit = game.time;
@@ -5116,6 +5449,12 @@ function updateThrowables(dt) {
     ui.flash.style.opacity = "0";
   }
   if (player.slow > 0) player.slow -= dt;
+
+  // Mending: health coming back a little at a time rather than all at once
+  if (powerActive("regen") && player.hp > 0) {
+    player.hp = Math.min(player.maxHp, player.hp + powerAmount("regen") * dt);
+    syncHud();
+  }
 }
 
 /** Smoke hides you: used by the bots' line-of-sight test. */
@@ -5454,6 +5793,15 @@ if (import.meta.env.DEV) {
     zombies,
     perkMachines,
     ownedPerks,
+    barriers,
+    wallBuys,
+    buyBarrier,
+    buyWallGun,
+    nukeTheMap,
+    powerActive,
+    powerAmount,
+    SKINS,
+    wallet,
     liveCount,
     buyPerk,
     PERKS_FOR_SALE,

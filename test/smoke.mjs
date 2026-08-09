@@ -240,6 +240,133 @@ if (followed.instakill) note("Instakill carried into the next game");
 if (followed.points) note("Double Points carried into the next game");
 if (followed.decoy) note("a decoy carried into the next game");
 
+// ── where the perk machines ended up, and the doors that gate them ──
+step("perks, paid doors and the gun on the wall");
+const world = await page.evaluate(() => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  const at = (id) => p.perkMachines.find((m) => m.perk.id === id);
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+  const half = p.MAPS.find((m) => m.id === "forest").half;
+
+  return {
+    machines: p.perkMachines.length,
+    speedCost: at("speed")?.perk.cost,
+    // the house sits at the origin and is about 20 across
+    speedInHouse: dist(at("speed") ?? { x: 99, z: 99 }, { x: 0, z: 0 }) < 24,
+    dtapInHouse: dist(at("dtap") ?? { x: 99, z: 99 }, { x: 0, z: 0 }) < 24,
+    juggOut: dist(at("jugg") ?? { x: 0, z: 0 }, { x: 0, z: 0 }) > half * 0.5,
+    staminOut: dist(at("stamin") ?? { x: 0, z: 0 }, { x: 0, z: 0 }) > 24,
+    doorCosts: p.barriers.map((b) => b.cost).sort((a, b) => a - b),
+    wallGuns: p.wallBuys.map((w) => ({ id: w.weaponId, cost: w.cost })),
+  };
+});
+
+step(`  ${world.machines} machines, doors at ${world.doorCosts.join("/")}`);
+if (world.machines !== 4) note(`${world.machines} perk machines placed, expected 4`);
+if (world.speedCost !== 2000) note(`Speed Cola costs ${world.speedCost}, expected 2000`);
+if (!world.speedInHouse) note("Speed Cola is not in the house");
+if (!world.dtapInHouse) note("Double Tap is not in the house");
+if (!world.juggOut) note("Juggernaut is not out in a corner");
+if (!world.staminOut) note("Stamin-Up is not out in the trees");
+for (const c of [750, 1000, 1250]) {
+  if (!world.doorCosts.includes(c)) note(`no ${c} point door was placed`);
+}
+if (world.wallGuns.length !== 1) note(`${world.wallGuns.length} wall guns, expected 1`);
+else {
+  if (world.wallGuns[0].id !== "dbarrel") note(`the wall gun is ${world.wallGuns[0].id}, expected the double barrel`);
+  if (world.wallGuns[0].cost !== 500) note(`the wall gun costs ${world.wallGuns[0].cost}, expected 500`);
+}
+
+// ── buying a door has to actually open the way through ──
+step("a bought door stops blocking");
+const door = await page.evaluate(() => {
+  const p = window.__probe;
+  const b = p.barriers.find((x) => !x.bought);
+  if (!b) return { error: "no barrier to buy" };
+  p.game.points = 99999;
+  const before = p.barriers.filter((x) => !x.bought).length;
+  p.buyBarrier(b);
+  return { bought: b.bought, before, after: p.barriers.filter((x) => !x.bought).length, poorer: p.game.points < 99999 };
+});
+if (door.error) note(door.error);
+else {
+  if (!door.bought) note("buying a door did not clear it");
+  if (door.after !== door.before - 1) note("the cleared door is still in the way");
+  if (!door.poorer) note("clearing a door cost nothing");
+}
+
+// ── the double barrel comes off the wall and into your hands ──
+step("the wall gun can be bought and topped up");
+const wallGun = await page.evaluate(() => {
+  const p = window.__probe;
+  const wb = p.wallBuys[0];
+  if (!wb) return { error: "no wall gun placed" };
+  p.game.points = 5000;
+  p.buyWallGun(wb);
+  const held = p.game.slots.find((s) => s.id === wb.weaponId);
+  const afterBuy = p.game.points;
+
+  if (held) held.reserve = 0;
+  p.buyWallGun(wb); // second time is ammo, at half price
+  return {
+    bought: !!held,
+    spent: 5000 - afterBuy,
+    refilled: (p.game.slots.find((s) => s.id === wb.weaponId)?.reserve ?? 0) > 0,
+    ammoCost: afterBuy - p.game.points,
+  };
+});
+if (wallGun.error) note(wallGun.error);
+else {
+  if (!wallGun.bought) note("buying the wall gun did not put it in your hands");
+  if (wallGun.spent !== 500) note(`the wall gun cost ${wallGun.spent}, expected 500`);
+  if (!wallGun.refilled) note("buying it again did not refill its ammo");
+  if (wallGun.ammoCost !== 250) note(`a refill cost ${wallGun.ammoCost}, expected 250`);
+}
+
+// ── the nuke ──
+step("the nuke clears the map for 400");
+const nuke = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.points = 0;
+  for (let i = 0; i < 8; i++) {
+    const z = p.spawnZombie(5);
+    z.kind = "walker";
+    z.rising = 0;
+  }
+  const before = p.liveCount();
+  p.nukeTheMap();
+  return { before, after: p.liveCount(), points: p.game.points };
+});
+if (nuke.after !== 0) note(`${nuke.after} zombies survived a nuke`);
+if (nuke.points !== 400) note(`a nuke paid ${nuke.points} points, expected 400`);
+
+// ── every skin's power has to fire without throwing ──
+step("every skin power activates");
+const powers = await page.evaluate(async () => {
+  const p = window.__probe;
+  const bad = [];
+  const combos = new Set();
+  for (const s of p.SKINS) {
+    if (!s.power) continue;
+    combos.add(s.power.parts.map((x) => x.effect).sort().join("+"));
+    try {
+      p.wallet.equipped = s.id;
+      p.power_readyAt = 0;
+      p.game.time += 200; // past the cooldown
+      p.activatePower();
+    } catch (e) {
+      bad.push(`${s.id}: ${e.message}`);
+    }
+  }
+  return { bad, withPower: p.SKINS.filter((s) => s.power).length, combos: combos.size };
+});
+step(`  ${powers.withPower} powers, ${powers.combos} distinct combinations`);
+for (const b of powers.bad.slice(0, 5)) note(`a skin power threw — ${b}`);
+if (powers.combos !== powers.withPower)
+  note(`${powers.withPower} skins share only ${powers.combos} distinct powers`);
+
 // ── every map has to build; one that throws leaves you on a dead screen ──
 step("every map builds");
 const maps = await page.evaluate(() => {

@@ -23,58 +23,119 @@ export const rarityOf = (id) => RARITIES.find((r) => r.id === id) ?? RARITIES[0]
 /* ── powers ──────────────────────────────────────────────────── */
 
 /*
- * Twelve kinds of effect. Every skin gets its own power built from one of
- * them, with its own name, its own numbers and its own description — no two
- * skins in the game share a power.
+ * Twenty kinds of effect, and every skin's power is a *pair* of them.
+ *
+ * One effect per skin cannot work: twenty skins to a rarity and nowhere near
+ * twenty effects that suit a Common means the same one comes round again and
+ * again, and the second Common heal is just the first one with a bigger
+ * number. Pairing fixes it — eight gentle effects already make twenty-eight
+ * distinct combinations, and each pair plays differently from every other
+ * because it is two things happening at once, not one thing turned up.
+ *
+ * No two skins in the game are given the same pair.
  */
 const EFFECTS = {
-  heal: { amount: (t) => 25 + t * 12, dur: () => 0, text: (a) => `Restores ${a} health on the spot.` },
-  sprint: { amount: (t) => 1.5 + t * 0.14, dur: (t) => 6 + t * 1.2, text: (a, d) => `Moves you ${a.toFixed(2)}× faster for ${d}s.` },
-  steady: { amount: () => 0, dur: (t) => 6 + t * 1.4, text: (a, d) => `No spread and no recoil for ${d}s.` },
-  ammo: { amount: () => 0, dur: (t) => 5 + t * 1.5, text: (a, d) => `Endless ammunition and no reloads for ${d}s.` },
-  damage: { amount: (t) => 1.5 + t * 0.18, dur: (t) => 6 + t * 1.2, text: (a, d) => `Every shot hits ${a.toFixed(2)}× harder for ${d}s.` },
-  slowfield: { amount: (t) => Math.max(0.08, 0.55 - t * 0.06), dur: (t) => 6 + t * 1.2, text: (a, d) => `Drags the horde down to ${Math.round(a * 100)}% speed for ${d}s.` },
-  freeze: { amount: () => 0, dur: (t) => 3 + t * 0.9, text: (a, d) => `Freezes every zombie solid for ${d}s.` },
-  shock: { amount: (t) => 80 + t * 26, dur: () => 0, text: (a) => `Hurls nearby zombies back for ${a} damage.` },
-  cloak: { amount: () => 0, dur: (t) => 5 + t * 1.3, text: (a, d) => `They lose track of you entirely for ${d}s.` },
-  shield: { amount: () => 0, dur: (t) => 4 + t * 1.1, text: (a, d) => `You take no damage at all for ${d}s.` },
-  vamp: { amount: (t) => 5 + t * 2, dur: (t) => 8 + t * 1.5, text: (a, d) => `Every kill heals you ${a} health for ${d}s.` },
-  touch: { amount: () => 0, dur: (t) => 5 + t * 1.1, text: (a, d) => `Anything that touches you dies on contact for ${d}s.` },
+  heal:      { amount: (t) => 25 + t * 12,   dur: () => 0,            text: (a) => `restores ${a} health` },
+  regen:     { amount: (t) => 3 + t * 1.1,   dur: (t) => 8 + t * 1.2, text: (a, d) => `heals ${a} health a second for ${d}s` },
+  sprint:    { amount: (t) => 1.4 + t * 0.1, dur: (t) => 6 + t * 1.2, text: (a, d) => `moves you ${a.toFixed(2)}× faster for ${d}s` },
+  steady:    { amount: () => 0,              dur: (t) => 6 + t * 1.4, text: (a, d) => `no spread and no recoil for ${d}s` },
+  ammo:      { amount: () => 0,              dur: (t) => 5 + t * 1.2, text: (a, d) => `endless ammunition and no reloads for ${d}s` },
+  refill:    { amount: () => 0,              dur: () => 0,            text: () => `fills every gun you are carrying` },
+  damage:    { amount: (t) => 1.4 + t * 0.14, dur: (t) => 6 + t * 1.2, text: (a, d) => `every shot hits ${a.toFixed(2)}× harder for ${d}s` },
+  frenzy:    { amount: (t) => 1.3 + t * 0.1, dur: (t) => 5 + t * 1.1, text: (a, d) => `fires ${a.toFixed(2)}× faster for ${d}s` },
+  slowfield: { amount: (t) => Math.max(0.1, 0.6 - t * 0.045), dur: (t) => 6 + t * 1.2, text: (a, d) => `drags the horde down to ${Math.round(a * 100)}% speed for ${d}s` },
+  freeze:    { amount: () => 0,              dur: (t) => 3 + t * 0.7, text: (a, d) => `freezes every zombie solid for ${d}s` },
+  shock:     { amount: (t) => 70 + t * 22,   dur: () => 0,            text: (a) => `hurls nearby zombies back for ${a} damage` },
+  blast:     { amount: (t) => 110 + t * 34,  dur: () => 0,            text: (a) => `blows everything within twenty paces apart for ${a} damage` },
+  cloak:     { amount: () => 0,              dur: (t) => 5 + t * 1.1, text: (a, d) => `they lose track of you entirely for ${d}s` },
+  decoy:     { amount: () => 0,              dur: (t) => 6 + t * 1.3, text: (a, d) => `leaves something they would rather chase for ${d}s` },
+  shield:    { amount: () => 0,              dur: (t) => 4 + t * 0.9, text: (a, d) => `you take no damage at all for ${d}s` },
+  armour:    { amount: (t) => Math.min(0.85, 0.4 + t * 0.03), dur: (t) => 7 + t * 1.3, text: (a, d) => `takes ${Math.round(a * 100)}% off everything that hits you for ${d}s` },
+  vamp:      { amount: (t) => 5 + t * 2,     dur: (t) => 8 + t * 1.5, text: (a, d) => `every kill heals you ${a} health for ${d}s` },
+  thorns:    { amount: (t) => 40 + t * 18,   dur: (t) => 8 + t * 1.4, text: (a, d) => `anything that claws you takes ${a} back for ${d}s` },
+  points:    { amount: () => 0,              dur: (t) => 10 + t * 2,  text: (a, d) => `doubles every point you earn for ${d}s` },
+  nuke:      { amount: () => 400,            dur: () => 0,            text: () => `kills every zombie on the map, for 400 points` },
 };
 
-// what each rarity is allowed to roll — the ceiling rises as you climb
+const FRACTIONAL = new Set(["sprint", "damage", "slowfield", "frenzy", "armour", "regen"]);
+
+/*
+ * What each rarity may draw on, and how many effects its skins combine. The
+ * lists grow and get nastier as you climb; the top three rarities take three
+ * effects at once rather than two, which is both why they feel like a step up
+ * and how there is room for every one of the hundred and forty to be unlike
+ * all the others.
+ */
 const EFFECT_POOLS = {
-  common: ["heal", "sprint", "steady"],
-  uncommon: ["heal", "sprint", "steady", "shock", "vamp"],
-  rare: ["ammo", "damage", "shock", "vamp", "steady"],
-  epic: ["damage", "cloak", "slowfield", "ammo", "vamp"],
-  legendary: ["freeze", "shield", "slowfield", "cloak", "damage"],
-  special: ["freeze", "shield", "cloak", "damage", "ammo"],
-  op: ["touch", "shield", "freeze", "damage", "vamp"],
+  common: ["heal", "sprint", "steady", "regen", "refill", "points", "thorns", "shock"],
+  uncommon: ["heal", "sprint", "steady", "regen", "refill", "points", "thorns", "shock", "vamp", "decoy", "armour"],
+  rare: ["sprint", "steady", "regen", "refill", "points", "thorns", "shock", "vamp", "decoy", "armour", "ammo", "damage", "frenzy"],
+  epic: ["heal", "sprint", "steady", "regen", "points", "thorns", "vamp", "decoy", "armour", "ammo", "damage", "frenzy", "cloak", "slowfield", "blast"],
+  legendary: ["freeze", "shield", "slowfield", "cloak", "damage", "blast", "armour", "frenzy", "ammo", "vamp", "decoy", "regen"],
+  special: ["freeze", "shield", "cloak", "damage", "ammo", "blast", "armour", "slowfield", "frenzy", "vamp", "points", "decoy"],
+  op: ["nuke", "shield", "freeze", "damage", "vamp", "blast", "armour", "cloak", "ammo", "frenzy", "slowfield", "steady", "regen"],
 };
 
-// 20 × 10 = 200 unique pairs, more than the 140 skins need
+// how many effects a rarity's powers combine
+const COMBINE = { common: 2, uncommon: 2, rare: 2, epic: 2, legendary: 3, special: 3, op: 3 };
+
+// 20 × 10 = 200 names, more than the 140 skins need
 const PW_A = ["Surge", "Pulse", "Rush", "Veil", "Bulwark", "Cinder", "Frost", "Echo", "Rift", "Vault", "Ward", "Hunger", "Sable", "Tempest", "Halo", "Ash", "Kindle", "Umbra", "Torrent", "Zenith"];
 const PW_B = ["Protocol", "Doctrine", "Reflex", "Cascade", "Instinct", "Gambit", "Overdrive", "Resolve", "Bloom", "Cycle"];
 
-function makePower(index, rarityIndex, slot) {
-  const pool = EFFECT_POOLS[RARITIES[rarityIndex].id];
-  const effect = pool[slot % pool.length];
+/** Every combination of `size` effects a pool can make, in a fixed order. */
+function combosOf(pool, size) {
+  if (size === 1) return pool.map((e) => [e]);
+  const out = [];
+  for (let i = 0; i <= pool.length - size; i++) {
+    for (const rest of combosOf(pool.slice(i + 1), size - 1)) out.push([pool[i], ...rest]);
+  }
+  return out;
+}
+
+const takenCombos = new Set();
+const comboKey = (c) => [...c].sort().join("+");
+
+/** "a", "a and b", "a, b and c" — read out loud rather than machine-listed. */
+const sentence = (bits) =>
+  bits.length < 2 ? bits[0] : `${bits.slice(0, -1).join(", ")} and ${bits[bits.length - 1]}`;
+
+function buildPart(effect, tier) {
   const spec = EFFECTS[effect];
-  const tier = rarityIndex * 2 + (slot % 4); // 0..15, drives the numbers
-
   const raw = spec.amount(tier);
-  const amount = effect === "sprint" || effect === "damage" || effect === "slowfield"
-    ? raw
-    : Math.round(raw);
-  const dur = Math.round(spec.dur(tier));
-
   return {
     effect,
-    amount,
+    amount: FRACTIONAL.has(effect) ? Number(raw.toFixed(2)) : Math.round(raw),
+    dur: Math.round(spec.dur(tier)),
+  };
+}
+
+function makePower(index, rarityIndex, slot) {
+  const rarity = RARITIES[rarityIndex].id;
+  const combos = combosOf(EFFECT_POOLS[rarity], COMBINE[rarity]);
+
+  // Walk the pool's combinations from a slot-dependent start until one nobody
+  // else has is found. Each pool is sized so this always lands.
+  let chosen = null;
+  for (let n = 0; n < combos.length; n++) {
+    const cand = combos[(slot * 7 + n) % combos.length];
+    if (takenCombos.has(comboKey(cand))) continue;
+    chosen = cand;
+    break;
+  }
+  chosen ??= combos[slot % combos.length]; // should never happen; stay standing
+  takenCombos.add(comboKey(chosen));
+
+  const tier = rarityIndex * 2.2 + (slot % 5) * 0.6; // 0..~16, drives the numbers
+  const parts = chosen.map((e) => buildPart(e, tier));
+  const dur = Math.max(...parts.map((p) => p.dur));
+
+  return {
+    parts,
     dur,
     name: `${PW_A[index % PW_A.length]} ${PW_B[Math.floor(index / PW_A.length) % PW_B.length]}`,
-    desc: spec.text(amount, dur),
+    desc: `${sentence(parts.map((p) => EFFECTS[p.effect].text(p.amount, p.dur)))}.`
+      .replace(/^./, (c) => c.toUpperCase()),
   };
 }
 
