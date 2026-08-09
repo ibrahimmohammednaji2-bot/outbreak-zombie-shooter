@@ -538,6 +538,26 @@ if (!shopOk.open) note("the shop button did not open the shop");
 if (shopOk.paid !== 25) note(`daily reward paid ${shopOk.paid} coins, expected 25`);
 if (!shopOk.claimedOnce) note("the daily reward can be claimed twice in a row");
 
+/*
+ * Every button in the shop gets pressed. Reading the freebie alone missed a
+ * missing import on the buy path, which threw the moment anyone touched a
+ * token pack — a button that is never clicked is a button that is not tested.
+ */
+step("every shop button survives being pressed");
+const buttons = await page.evaluate(async () => {
+  document.getElementById("shop-btn").click();
+  const ids = [...document.querySelectorAll("#shop-body button[data-shop]")].map((b) => b.dataset.shop);
+  for (const id of ids) {
+    const el = document.querySelector(`#shop-body button[data-shop="${id}"]`);
+    if (el) el.click();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  document.getElementById("shop-close").click();
+  return ids;
+});
+step(`  ${buttons.length} pressed: ${buttons.join(", ")}`);
+if (buttons.length < 7) note(`only ${buttons.length} shop buttons found, expected the packs and more`);
+
 // ── the last-resort panel must stay out of the way when nothing is wrong ──
 step("no crash panel on a healthy load");
 const crash = await page.evaluate(() => {
