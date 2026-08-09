@@ -35,6 +35,47 @@
     </script>
   </head>
   <body>
+    <!--
+      A tablet has no console you can open, so when the game fails to start
+      there it fails silently and all anyone can say is that it will not open.
+      This says what went wrong on the screen itself. Deliberately old-fashioned
+      JavaScript in a plain script: it has to survive a browser that could not
+      parse the game in the first place, which is the case it exists for.
+    -->
+    <div id="crash" style="display:none"></div>
+    <script>
+      (function () {
+        var shown = false;
+        function show(title, detail) {
+          if (shown) return;
+          shown = true;
+          var el = document.getElementById("crash");
+          el.style.display = "block";
+          el.innerHTML =
+            '<div class="crash-panel"><h2>' + title + "</h2><pre>" +
+            String(detail).replace(/</g, "&lt;") +
+            '</pre><p>Screenshot this and send it over.</p>' +
+            '<p class="crash-ua">' + navigator.userAgent.replace(/</g, "&lt;") + "</p></div>";
+        }
+        window.addEventListener("error", function (e) {
+          show("This device could not run the game", (e.message || "") + "\n" + (e.filename || "") + ":" + (e.lineno || ""));
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          show("Something failed while loading", (e.reason && e.reason.message) || e.reason);
+        });
+        window.__booted = function () { shown = true; };
+        // nothing has started after ten seconds — say so rather than sit blank
+        setTimeout(function () {
+          if (!window.__started) {
+            show(
+              "The game did not start",
+              "No error was reported, so this is most likely WebGL being unavailable or out of memory on this device."
+            );
+          }
+        }, 10000);
+      })();
+    </script>
+
     <canvas id="scene"></canvas>
 
     <!-- red flash when the player takes damage -->

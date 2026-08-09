@@ -279,10 +279,106 @@ else {
   if (world.wallGuns[0].cost !== 500) note(`the wall gun costs ${world.wallGuns[0].cost}, expected 500`);
 }
 
+/*
+ * The point of a paid door is that there is no other way in. Walking out from
+ * whatever is being gated, cell by cell at the height you would stand there,
+ * must not reach open ground — and once the boards are bought, it must.
+ */
+step("nothing gated can be walked into without paying");
+await page.evaluate(() => {
+  window.__leaks = (cx, cz, y, R) => {
+    const p = window.__probe;
+    const CELL = 0.3;
+    const OUT = R + 4; // escaping this far means it is not sealed
+    const near = p.obstacles.filter(
+      (o) => Math.abs(o.x - cx) < OUT + 12 && Math.abs(o.z - cz) < OUT + 12
+        && o.bottom < y + 1.7 && o.top > y + 0.25,
+    );
+    const standable = (x, z) => {
+      const dx = x - cx, dz = z - cz;
+      for (const o of near) {
+        const ox = x - o.x, oz = z - o.z;
+        const lx = ox * o.cos - oz * o.sin;
+        const lz = ox * o.sin + oz * o.cos;
+        if (Math.abs(lx) < o.hw + p.PLAYER_R && Math.abs(lz) < o.hd + p.PLAYER_R) return false;
+      }
+      void dx; void dz;
+      return true;
+    };
+
+    /*
+     * Start on clear ground inside, not on the centre — the machine or the box
+     * being gated stands there and is itself solid, so a fill seeded on it
+     * never gets out and everything looks sealed.
+     */
+    let seed = null;
+    for (let ring = 1; ring <= 6 && !seed; ring++) {
+      for (let k = 0; k < 16 && !seed; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const i = Math.round((Math.cos(a) * ring * R) / 6 / CELL);
+        const j = Math.round((Math.sin(a) * ring * R) / 6 / CELL);
+        if (standable(cx + i * CELL, cz + j * CELL)) seed = [i, j];
+      }
+    }
+    if (!seed) return false; // nowhere to stand in there at all
+
+    const key = (i, j) => `${i},${j}`;
+    const seen = new Set();
+    const queue = [seed];
+    seen.add(key(seed[0], seed[1]));
+    while (queue.length) {
+      const [i, j] = queue.pop();
+      const x = cx + i * CELL;
+      const z = cz + j * CELL;
+      if (Math.hypot(x - cx, z - cz) > OUT) return true; // got out
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj;
+        if (seen.has(key(ni, nj))) continue;
+        const nx = cx + ni * CELL;
+        const nz = cz + nj * CELL;
+        if (!standable(nx, nz)) continue;
+        seen.add(key(ni, nj));
+        queue.push([ni, nj]);
+      }
+    }
+    return false; // never got out — sealed
+  };
+});
+
+const sealed = await page.evaluate(() => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  const out = [];
+
+  const jugg = p.perkMachines.find((m) => m.perk.id === "jugg");
+  const dtap = p.perkMachines.find((m) => m.perk.id === "dtap");
+  const box = p.mysteryBoxes[0];
+
+  out.push({ what: "Juggernaut", leaks: window.__leaks(jugg.x, jugg.z, 0, 4.2) });
+  out.push({ what: "Double Tap", leaks: window.__leaks(dtap.x, dtap.z, 0, 2.6) });
+  if (box) out.push({ what: "the mystery box", leaks: window.__leaks(box.x, box.z, box.y, 2.9) });
+
+  // and once everything is paid for, all of it has to open up
+  p.game.points = 99999;
+  for (const b of p.barriers) p.buyBarrier(b);
+  out.push({ what: "Juggernaut once paid", leaks: window.__leaks(jugg.x, jugg.z, 0, 4.2), wantOpen: true });
+  out.push({ what: "Double Tap once paid", leaks: window.__leaks(dtap.x, dtap.z, 0, 2.6), wantOpen: true });
+  if (box) out.push({ what: "the box once paid", leaks: window.__leaks(box.x, box.z, box.y, 2.9), wantOpen: true });
+  return out;
+});
+
+for (const s of sealed) {
+  if (s.wantOpen && !s.leaks) note(`${s.what} is still walled in after buying the way through`);
+  if (!s.wantOpen && s.leaks) note(`${s.what} can be reached without paying`);
+}
+step(`  ${sealed.filter((s) => !s.wantOpen && !s.leaks).length}/3 sealed, ${sealed.filter((s) => s.wantOpen && s.leaks).length}/3 open once paid`);
+
 // ── buying a door has to actually open the way through ──
 step("a bought door stops blocking");
 const door = await page.evaluate(() => {
   const p = window.__probe;
+  p.resetGame(); // the sealing test above paid for everything
   const b = p.barriers.find((x) => !x.bought);
   if (!b) return { error: "no barrier to buy" };
   p.game.points = 99999;
@@ -441,6 +537,15 @@ const shopOk = await page.evaluate(() => {
 if (!shopOk.open) note("the shop button did not open the shop");
 if (shopOk.paid !== 25) note(`daily reward paid ${shopOk.paid} coins, expected 25`);
 if (!shopOk.claimedOnce) note("the daily reward can be claimed twice in a row");
+
+// ── the last-resort panel must stay out of the way when nothing is wrong ──
+step("no crash panel on a healthy load");
+const crash = await page.evaluate(() => {
+  const el = document.getElementById("crash");
+  return { shown: el && el.style.display !== "none", started: window.__started === true };
+});
+if (crash.shown) note("the crash panel is showing on a load that worked");
+if (!crash.started) note("the game never signalled that it started");
 
 await browser.close();
 report();

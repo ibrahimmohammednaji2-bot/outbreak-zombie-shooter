@@ -1070,23 +1070,29 @@ function house(x, z, seed = 1, boxSink = null, markSink = null) {
     const runStart = HD - 1.2;
 
     if (markSink) {
-      // Speed Cola in the living room, Double Tap through the partition in the
-      // dining room, so the doorway between them is worth charging for.
+      // Speed Cola stands open in the living room — the one you can always get
+      // to. Double Tap is boarded into the far corner of the dining room.
       markSink.push({ kind: "perk", id: "speed", x: x - HW * 0.58, z: z + HD * 0.62 });
-      markSink.push({ kind: "perk", id: "dtap", x: x + HW * 0.55, z: z + HD * 0.6 });
+      markSink.push({
+        kind: "booth-perk", id: "dtap", cost: 750, r: 2.6,
+        x: x + HW * 0.62, z: z - HD * 0.62,
+        // the way in looks back into the room, not into the outside wall
+        facing: Math.atan2(HD * 0.62, -HW * 0.62),
+      });
 
       // the gun on the wall, hung on the inside of the west wall
       markSink.push({ kind: "wallbuy", x: x - HW + 0.75, z: z + HD * 0.15, face: 0 });
 
-      // the partition doorway — the only way through to Double Tap
+      /*
+       * The box, and the walls round it. Charging at the foot of the stairs
+       * did not work: the upstairs walls are half fallen down and there is
+       * more than one way onto that floor, so the money bought nothing. The
+       * boards go round the box itself, where there is only one way in.
+       */
       markSink.push({
-        kind: "door", cost: 750, x: x - HW * 0.12, z, hw: 0.25, hd: 1.6, h: H,
-      });
-
-      // and the foot of the stairs, which is the only way up to the box
-      markSink.push({
-        kind: "door", cost: 1250, x: x + side * (HW - 1.5), z: z + runStart + 1.15,
-        hw: 1.35, hd: 0.3, h: H,
+        kind: "booth-box", cost: 1250, r: 2.9,
+        x: x - side * HW * 0.45, z: z - HD * 0.15, y: FLOOR + 0.35,
+        facing: Math.atan2(HD * 0.15, side * HW * 0.45),
       });
     }
     const tread = (runStart - stairTopZ) / 11;
@@ -2088,20 +2094,33 @@ const wallBuys = [];
 const WALL_GUN = "dbarrel"; // the double barrel, hung inside the house
 const WALL_GUN_COST = 500;
 
-function addBarrier(x, z, y, hw, hd, h, cost, angle = 0) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0x6a533a });
+/*
+ * A slab, and the box that blocks you, agreeing about which way they face.
+ *
+ * `run` is the world direction the slab's length points along. The engine
+ * stores an obstacle's orientation as cos/sin of a rotation whose local x axis
+ * comes out at (cos r, -sin r), and three.js turns a mesh the same way, so
+ * both take r = -run. Getting that sign wrong is invisible at right angles —
+ * the two boxes still cover the same ground — and puts the wall ninety degrees
+ * away from where it looks on the diagonal.
+ */
+function orientedSlab(x, z, y, hw, hd, h, run, colour) {
+  const r = -run;
+  const mat = new THREE.MeshLambertMaterial({ color: colour });
   const mesh = new THREE.Mesh(UNIT_BOX, mat);
   mesh.scale.set(hw * 2, h, hd * 2);
   mesh.position.set(x, y + h / 2, z);
-  mesh.rotation.y = -angle;
+  mesh.rotation.y = r;
   mesh.castShadow = mesh.receiveShadow = true;
   mapGroup.add(mesh);
 
-  const obs = {
-    x, z, hw, hd, bottom: y, top: y + h,
-    cos: Math.cos(angle), sin: Math.sin(angle),
-  };
+  const obs = { x, z, hw, hd, bottom: y, top: y + h, cos: Math.cos(r), sin: Math.sin(r) };
   obstacles.push(obs);
+  return { mesh, mat, obs };
+}
+
+function addBarrier(x, z, y, hw, hd, h, cost, run = 0) {
+  const { mesh, mat, obs } = orientedSlab(x, z, y, hw, hd, h, run, 0x6a533a);
   barriers.push({ x, z, y, cost, mesh, mat, obs, bought: false });
 }
 
@@ -2250,11 +2269,19 @@ function placePerkMachines() {
   const perk = (id) => PERKS_FOR_SALE.find((p) => p.id === id);
   const marks = mapDef.marks ?? [];
 
-  // ── the two in the house, and the doors that gate them ──
+  // ── the two in the house, the boards round one, and the gun on the wall ──
   for (const m of marks) {
     if (m.kind === "perk") {
       const [px, pz] = clearNear(m.x, m.z, 1.2, 4);
       addPerkMachine(perk(m.id), px, pz);
+    }
+    if (m.kind === "booth-perk") {
+      addPerkMachine(perk(m.id), m.x, m.z);
+      booth(m.x, m.z, 0, m.cost, m.r, m.facing);
+    }
+    if (m.kind === "booth-box") {
+      // the box is already up there; the walls go round where it stands
+      booth(m.x, m.z, m.y, m.cost, m.r, m.facing, 2.4);
     }
     if (m.kind === "door") addBarrier(m.x, m.z, 0, m.hw, m.hd, m.h, m.cost);
     if (m.kind === "wallbuy") addWallBuy(m.x, m.z, WALL_GUN, WALL_GUN_COST);
@@ -2265,7 +2292,7 @@ function placePerkMachines() {
   const ca = Math.PI / 4 + (corner * Math.PI) / 2;
   const [jx, jz] = clearSpot(ca, HALF * 0.78);
   addPerkMachine(perk("jugg"), jx, jz);
-  walledIn(jx, jz, 1000);
+  booth(jx, jz, 0, 1000, 4.2, ca + Math.PI); // the way in faces the middle
 
   // ── Stamin-Up, loose in the woods ──
   const sa = Math.random() * Math.PI * 2;
@@ -2274,35 +2301,26 @@ function placePerkMachines() {
 }
 
 /*
- * Three walls of heaped rubble and a barred way in, so the machine inside is
- * only reachable by paying. The gap faces the middle of the map — you should
- * be able to see what you are paying for before you pay.
+ * Four walls round something, three of them solid and the fourth the thing you
+ * pay to get through. The way in faces `facing` — towards the middle of the
+ * map, or the middle of a room — so you can see what you are buying first.
+ *
+ * The walls run half a thickness past the corners on purpose. Butted exactly
+ * to the corner they leave a slot the width of the boards, and a slot that
+ * size is a doorway to anything with a radius under half a metre. That is how
+ * you were getting to Juggernaut without paying.
  */
-function walledIn(x, z, cost) {
-  const R = 4.2;
-  const inward = Math.atan2(-z, -x); // back towards the centre
-  const wall = 0x6f665b;
-
+function booth(x, z, y, cost, R, facing, h = 2.8) {
+  const T = 0.45; // half the thickness of a wall
   for (let i = 0; i < 4; i++) {
-    const a = inward + (i * Math.PI) / 2;
+    const a = facing + (i * Math.PI) / 2;
     const wx = x + Math.cos(a) * R;
     const wz = z + Math.sin(a) * R;
-    const along = a + Math.PI / 2;
+    const run = a + Math.PI / 2; // the wall lies across the spoke
+    const hw = R + T; // long enough to seal both corners
 
-    if (i === 0) {
-      addBarrier(wx, wz, 0, R * 0.95, 0.4, 2.6, cost, along);
-      continue;
-    }
-    const mesh = new THREE.Mesh(UNIT_BOX, new THREE.MeshLambertMaterial({ color: wall }));
-    mesh.scale.set(R * 1.9, 2.6, 0.8);
-    mesh.position.set(wx, 1.3, wz);
-    mesh.rotation.y = -along;
-    mesh.castShadow = mesh.receiveShadow = true;
-    mapGroup.add(mesh);
-    obstacles.push({
-      x: wx, z: wz, hw: R * 0.95, hd: 0.4, bottom: 0, top: 2.6,
-      cos: Math.cos(along), sin: Math.sin(along),
-    });
+    if (i === 0) addBarrier(wx, wz, y, hw, T, h, cost, run);
+    else orientedSlab(wx, wz, y, hw, T, h, run, 0x6f665b);
   }
 }
 /** Take a body out of the shootable set without removing it from the world. */
@@ -5795,6 +5813,9 @@ if (import.meta.env.DEV) {
     ownedPerks,
     barriers,
     wallBuys,
+    obstacles,
+    mysteryBoxes,
+    PLAYER_R,
     buyBarrier,
     buyWallGun,
     nukeTheMap,
@@ -5821,3 +5842,6 @@ if (import.meta.env.DEV) {
     toLobby,
   };
 }
+
+// Tell the watchdog in index.html that we got this far, so it stops waiting.
+window.__started = true;

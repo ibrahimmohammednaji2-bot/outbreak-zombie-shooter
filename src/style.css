@@ -1542,3 +1542,32 @@ button.ghost:hover {
 
 #revive-btn { border-color: #ffc94a; color: #ffc94a; }
 #revive-btn:hover { background: #ffc94a; color: #10131a; }
+
+/* The last-resort panel from index.html, for a device with no console. */
+#crash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0d1710;
+  color: #e8efe6;
+  overflow: auto;
+  padding: 24px;
+  font: 15px/1.5 ui-monospace, Menlo, Consolas, monospace;
+}
+.crash-panel { max-width: 640px; margin: 8vh auto; }
+.crash-panel h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: #ff6b6b;
+}
+.crash-panel pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #131f18;
+  border: 1px solid #2a3a2e;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 0 0 14px;
+}
+.crash-ua { color: #7d8c80; font-size: 12px; }
