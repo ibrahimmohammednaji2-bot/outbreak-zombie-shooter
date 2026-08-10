@@ -1430,6 +1430,7 @@ button.ghost:hover {
 .tbtn.s2 { right: 34px; top: 208px; }
 .tbtn.s3 { right: 34px; top: 296px; }
 .tbtn.s4 { right: 34px; top: 384px; }
+.tbtn.s5 { right: 34px; top: 472px; border-color: rgba(255, 201, 74, 0.75); color: #ffc94a; }
 
 .tbtn.pause { left: 26px; top: 22px; width: 54px; height: 54px; }
 .tbtn.pause span { font-size: 16px; }

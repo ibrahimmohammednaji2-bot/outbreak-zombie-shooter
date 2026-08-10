@@ -816,16 +816,22 @@ const banked = await page.evaluate(() => {
   p.beginPlay();
   p.bank.points = 0;
   p.game.points = 3000;
-  p.useBank(false); // deposit
+  p.useBank(false); // F: money in
   const afterDeposit = { pocket: p.game.points, bank: p.bank.points };
+  // F must never take money out, however little is in hand
+  p.game.points = 0;
+  p.useBank(false);
+  const fNeverWithdraws = p.game.points === 0 && p.bank.points === afterDeposit.bank;
+  p.game.points = 2000;
   p.resetGame(); // a new run: pocket points are gone, banked ones are not
   const survived = p.bank.points;
   p.game.points = 0;
-  p.useBank(true); // withdraw
-  return { afterDeposit, survived, pocket: p.game.points, left: p.bank.points };
+  p.useBank(true); // C: money out
+  return { afterDeposit, survived, fNeverWithdraws, pocket: p.game.points, left: p.bank.points };
 });
 if (banked.afterDeposit.bank !== 1000) note(`depositing put ${banked.afterDeposit.bank} in the bank, expected 1000`);
 if (banked.afterDeposit.pocket !== 2000) note(`depositing left ${banked.afterDeposit.pocket} in hand, expected 2000`);
+if (!banked.fNeverWithdraws) note("F took money out of the bank — it should only put money in");
 if (banked.survived !== 1000) note("the bank did not survive a new run");
 if (banked.pocket !== 1000) note(`withdrawing gave ${banked.pocket}, expected 1000`);
 if (banked.left !== 0) note(`withdrawing left ${banked.left} banked, expected 0`);

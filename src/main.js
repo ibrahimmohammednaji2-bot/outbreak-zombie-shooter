@@ -3932,10 +3932,11 @@ function describeThing(t) {
     return { cost, line: `PACK-A-PUNCH — ${cost} POINTS${packed ? " · AMMO" : ""}` };
   }
   if (t.kind === "bank") {
-    const takingOut = game.points < BANK_STEP;
-    return takingOut
-      ? { cost: 0, line: `WITHDRAW ${Math.min(BANK_STEP, bank.points)} — ${bank.points} BANKED` }
-      : { cost: 0, line: `DEPOSIT ${BANK_STEP} — ${bank.points} BANKED` };
+    return {
+      cost: 0,
+      keys: "F/C",
+      line: `BANK — F PUTS ${BANK_STEP} IN · C TAKES ${BANK_STEP} OUT · ${bank.points} HELD`,
+    };
   }
   if (t.kind === "bench") {
     const ready = benchReady();
@@ -3963,7 +3964,7 @@ function actOnThing(t) {
   if (t.kind === "door") return buyBarrier(t.barrier);
   if (t.kind === "wall") return buyWallGun(t.wall);
   if (t.kind === "pack") return packCurrentWeapon();
-  if (t.kind === "bank") return useBank(game.points < BANK_STEP);
+  if (t.kind === "bank") return useBank(false); // F puts money in; C takes it out
   if (t.kind === "bench") return buildAtBench();
   if (t.kind === "socket") return placeTurbine(t.socket);
   if (t.kind === "leroy") return freeLeroy();
@@ -4006,14 +4007,16 @@ function updateBoxPrompt() {
     return;
   }
 
-  const { cost, line, owned } = describeThing(nearThing);
+  const { cost, line, owned, keys } = describeThing(nearThing);
   const affordable = game.points >= cost;
+  const key = keys ?? "F";
+  if (touchMode) $("t-bank")?.classList.toggle("hidden", nearThing.kind !== "bank");
   el.classList.remove("hidden");
   el.classList.toggle("poor", !owned && !affordable);
 
   if (owned) el.innerHTML = `<b>✓</b>${line}`;
-  else if (affordable) el.innerHTML = `<b>F</b>${line}`;
-  else el.innerHTML = `<b>F</b>NEED ${cost - game.points} MORE POINTS`;
+  else if (affordable) el.innerHTML = `<b>${key}</b>${line}`;
+  else el.innerHTML = `<b>${key}</b>NEED ${cost - game.points} MORE POINTS`;
 }
 
 function useBox() {
@@ -4956,6 +4959,8 @@ addEventListener("keydown", (e) => {
   if (e.code === "Digit3") switchWeapon(2);
   if (e.code === "KeyE") activatePower();
   if (e.code === "KeyF") useBox();
+  // the bank is the one thing with two answers, so it gets two keys
+  if (e.code === "KeyC" && nearThing?.kind === "bank") useBank(true);
   if (e.code === "KeyZ") throwEquipment(true);
   if (e.code === "KeyX") throwEquipment(false);
   if (e.code === "Space" && player.grounded) {
@@ -6819,6 +6824,7 @@ $("touch").addEventListener("touchstart", (e) => {
   if (what === "lethal") throwEquipment(true);
   if (what === "tactical") throwEquipment(false);
   if (what === "box") useBox();
+  if (what === "withdraw" && nearThing?.kind === "bank") useBank(true);
   if (what === "w1") switchWeapon(0);
   if (what === "w2") switchWeapon(1);
   if (what === "w3") switchWeapon(2);
