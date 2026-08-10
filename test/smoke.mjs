@@ -128,6 +128,12 @@ if (waveTrace.waves < 2) note(`waves stalled at wave ${waveTrace.waves}`);
 step("a heap of corpses does not block the spawner");
 const spawner = await page.evaluate(async () => {
   const p = window.__probe;
+  // start from an empty map: a survivor of the previous step would be counted
+  // as alive here and read as a corpse that never died
+  for (const other of [...p.zombies]) {
+    if (other.kind === "reviver") other.finished = true;
+    p.killZombie(other);
+  }
   p.startWave(9); // more zombies owed than the map will hold at once
   for (let i = 0; i < 24; i++) {
     const z = p.spawnZombie(9);
@@ -482,6 +488,33 @@ const maps = await page.evaluate(() => {
 });
 for (const b of maps) note(`map failed to build — ${b}`);
 
+// ── the buried town has to be playable, not just buildable ──
+step("the buried town works like the other maps");
+const town = await page.evaluate(() => {
+  const p = window.__probe;
+  p.game.mapId = "town";
+  p.resetGame();
+  const start = p.MAPS.find((m) => m.id === "town").start;
+  return {
+    exists: !!p.MAPS.find((m) => m.id === "town"),
+    machines: p.perkMachines.length,
+    boxes: p.mysteryBoxes.length,
+    doors: p.barriers.length,
+    wallGuns: p.wallBuys.length,
+    props: p.obstacles.length,
+    // you must not begin the game standing inside a building
+    startClear: Math.hypot(p.player.pos.x - start[0], p.player.pos.z - start[1]) < 3,
+  };
+});
+step(`  ${town.props} solid props, ${town.machines} machines, ${town.boxes} box, ${town.doors} doors`);
+if (!town.exists) note("the buried town is not in the map list");
+if (town.machines !== 4) note(`the town has ${town.machines} perk machines, expected 4`);
+if (!town.boxes) note("the town has no mystery box");
+if (town.doors < 3) note(`the town has ${town.doors} paid doors, expected at least 3`);
+if (!town.wallGuns) note("the town has no gun on a wall");
+if (!town.startClear) note("you start the town shoved out of position, so the spawn is inside something");
+if (town.props < 400) note(`the town only has ${town.props} solid props — it will feel empty`);
+
 // ── every weapon has to be holdable and fireable ──
 step("every weapon fires");
 const guns = await page.evaluate(() => {
@@ -558,6 +591,123 @@ const buttons = await page.evaluate(async () => {
 step(`  ${buttons.length} pressed: ${buttons.join(", ")}`);
 if (buttons.length < 7) note(`only ${buttons.length} shop buttons found, expected the packs and more`);
 
+/*
+ * The one you can never find. A zombie that has wedged itself somewhere must
+ * be dug up and put back, or the wave never ends and the game stops.
+ */
+step("a wedged zombie gets dug out");
+const wedged = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  p.beginPlay();
+
+  for (const other of [...p.zombies]) p.killZombie(other); // an empty map runs faster
+  p.game.toSpawn = 0;
+
+  const z = p.spawnZombie(4);
+  z.kind = "walker";
+  z.rising = 0;
+  /*
+   * Nailed to the floor of the house. Speed zero is the strongest form of the
+   * bug — whatever wedges a zombie in practice, the symptom is that it does
+   * not move — and it cannot pass by wandering off on its own.
+   */
+  z.speed = 0;
+  z.group.position.set(0, 0, 0);
+  z.y = 0;
+  z.lastX = 0;
+  z.lastZ = 0;
+  z.stuckFor = 0;
+  p.player.pos.set(40, 0, 40); // and stand well away from it
+
+  /*
+   * Two halves, checked separately.
+   *
+   * First: does a motionless zombie's counter actually climb? Waiting out the
+   * whole six seconds here is not practical — this browser runs the game clock
+   * at about a seventh of real time — so watch it rise and trust the constant.
+   *
+   * Then: does the dig-out put it somewhere it can walk from? Called directly,
+   * so the check does not depend on how fast the clock happens to be running.
+   */
+  const wallStop = Date.now() + 60000;
+  let peak = 0;
+  while (Date.now() < wallStop && peak < 0.4) {
+    peak = Math.max(peak, z.stuckFor);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const counted = peak;
+  const before = { x: z.group.position.x, z: z.group.position.z };
+
+  p.digOutZombie(z);
+  const moved = Math.hypot(z.group.position.x - before.x, z.group.position.z - before.z);
+  const clearWhereItLanded = p.obstacles.every((o) => {
+    if (o.top <= 0.35 || o.bottom > 1.5) return true;
+    const ox = z.group.position.x - o.x;
+    const oz = z.group.position.z - o.z;
+    const lx = ox * o.cos - oz * o.sin;
+    const lz = ox * o.sin + oz * o.cos;
+    return !(Math.abs(lx) < o.hw + 0.5 && Math.abs(lz) < o.hd + 0.5);
+  });
+
+  return {
+    counted,
+    freed: moved > 6,
+    landedClear: clearWhereItLanded,
+    threshold: p.STUCK_TIME,
+    moved: Math.round(moved),
+  };
+});
+// Any climb at all proves it is counting; how long the game waits before
+// acting is a constant, not something worth spending real minutes measuring
+// in a browser that runs the clock two hundred times slow.
+if (!(wedged.counted > 0.2))
+  note(`a motionless zombie's stuck counter did not climb (reached ${wedged.counted})`);
+if (!wedged.freed) note(`digging a zombie out moved it only ${wedged.moved} units`);
+if (!wedged.landedClear) note("a dug-out zombie was put back inside something solid");
+step(`  counter reached ${wedged.counted.toFixed(1)}s of ${wedged.threshold}s, then dug out ${wedged.moved} units to clear ground`);
+
+// ── the shop's coin purchase and the revive it pays for ──
+step("a token can be bought with coins and spent on a revive");
+const tokens = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.wallet.coins = 100;
+  p.shopState.tokens = 0;
+  p.shopState.unlimited = false;
+
+  document.getElementById("shop-btn").click();
+  const btn = document.querySelector('#shop-body button[data-shop="pack:t1"]');
+  if (!btn) return { error: "no single-token pack in the shop" };
+  btn.click();
+  const bought = { coins: p.wallet.coins, tokens: p.shopState.tokens };
+  document.getElementById("shop-close").click();
+
+  // now die with it and see whether the revive is offered and works
+  p.resetGame();
+  p.beginPlay();
+  p.player.hp = 1;
+  p.endGame();
+  const offered = !document.getElementById("revive-btn").classList.contains("hidden");
+  p.reviveWithToken();
+  return {
+    bought,
+    offered,
+    alive: p.player.alive && !p.game.over,
+    left: p.shopState.tokens,
+    used: p.game.revivesUsed,
+  };
+});
+if (tokens.error) note(tokens.error);
+else {
+  if (tokens.bought.tokens !== 1) note(`100 coins bought ${tokens.bought.tokens} tokens, expected 1`);
+  if (tokens.bought.coins !== 0) note(`buying a token left ${tokens.bought.coins} coins, expected 0`);
+  if (!tokens.offered) note("the revive button was not offered with a token in hand");
+  if (!tokens.alive) note("spending a token did not put you back on your feet");
+  if (tokens.left !== 0) note(`reviving left ${tokens.left} tokens, expected 0`);
+  if (tokens.used !== 1) note(`revives used came to ${tokens.used}, expected 1`);
+}
+
 // ── aiming down the sights ──
 step("right button aims, and only the right guns have sights");
 const sights = await page.evaluate(async () => {
@@ -576,31 +726,36 @@ const sights = await page.evaluate(async () => {
   p.game.weapon = 0;
   // the view eases rather than snapping, and this browser runs at a few
   // frames a second, so wait for it to settle instead of guessing at a delay
-  const settle = async () => {
-    let last = -1;
-    let still = 0;
-    // several readings the same in a row, not one — at four frames a second
-    // two samples in a row land inside the same frame often enough to fool it
-    for (let i = 0; i < 120 && still < 5; i++) {
+  /*
+   * The view eases rather than snapping, so wait for the easing value itself
+   * to arrive rather than for the field of view to stop changing. Watching for
+   * "it stopped moving" is unreliable here: at a few frames a second, several
+   * samples in a row land inside the same frame and look settled when they
+   * are only between frames.
+   */
+  const settleTo = async (target) => {
+    const stop = Date.now() + 90000;
+    while (Date.now() < stop && Math.abs(p.aim.k - target) > 0.001) {
       await new Promise((r) => setTimeout(r, 100));
-      still = Math.abs(p.camera.fov - last) < 0.01 ? still + 1 : 0;
-      last = p.camera.fov;
     }
     return p.camera.fov;
   };
 
-  const hipFov = p.camera.fov;
+  // all the way back to the hip first, so an earlier test leaving the view
+  // part way in does not become the baseline for everything after
+  p.setAiming(false);
+  const hipFov = await settleTo(0);
   p.setAiming(true);
-  const aimedFov = await settle();
+  const aimedFov = await settleTo(1);
   const wasAiming = p.aiming();
   p.setAiming(false);
-  const backFov = await settle();
+  const backFov = await settleTo(0);
 
   // a shotgun must not budge however hard the button is held
   const sg = p.WEAPONS.find((w) => w.id === "shotgun");
   p.game.slots = [{ id: "shotgun", mag: sg.mag, reserve: sg.reserve }];
   p.setAiming(true);
-  const shotgunFov = await settle();
+  const shotgunFov = await settleTo(0); // it must never leave the hip
   p.setAiming(false);
 
   return { startPoints, withSights, without, hipFov, aimedFov, backFov, shotgunFov, wasAiming };

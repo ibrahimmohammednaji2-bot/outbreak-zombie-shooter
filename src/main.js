@@ -720,6 +720,31 @@ scene.add(camera);
 
 const controls = new PointerLockControls(camera, document.body);
 
+/*
+ * Taking the mouse, without making a fuss if the browser says no.
+ *
+ * Chrome refuses a lock that is already held or asked for again too soon after
+ * an Escape, and refuses by rejecting a promise — which surfaces as an
+ * unhandled rejection and, before this, as an error the player could see. It
+ * is never worth stopping for: the game plays on, the mouse is just free.
+ */
+let lockPending = false;
+function grabMouse() {
+  // pointerLockElement is still null while a request is in flight, so that
+  // alone does not stop us asking twice — which is itself a refusal
+  if (touchMode || document.pointerLockElement || lockPending) return;
+  lockPending = true;
+  setTimeout(() => (lockPending = false), 500);
+  try {
+    // asking the element directly: PointerLockControls returns nothing to
+    // catch on, and an uncaught refusal used to reach the player as an error
+    const p = document.body.requestPointerLock();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch {
+    /* the mouse stays free; nothing else changes */
+  }
+}
+
 addEventListener("resize", () => {
   camera.aspect = lobbyCam.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -865,6 +890,201 @@ function ruinWall(cx, cz, axis, len, h, t, colour, rnd, opts = {}) {
     } else {
       out.push(box(px, pz, w, h, d, colour, 0, y)); // intact
     }
+  }
+  return out;
+}
+
+/* ── the buried town ─────────────────────────────────────────── */
+
+const TIMBER = [0x4a3728, 0x55402e, 0x3d2e22, 0x5e4632];
+const PLANK = 0x6b5233;
+const ADOBE = 0x8a7355;
+
+/*
+ * A Western storefront. The false front is the whole trick of the style: a
+ * flat parapet carried up past the roofline so a single-storey shed looks like
+ * a two-storey building from the street. Underneath it is a porch on posts and
+ * a boardwalk, then one room you can walk into.
+ *
+ * `face` is the direction the front looks: 0 towards +z, PI towards -z.
+ */
+function storefront(x, z, w, d, seed, face = 0, opts = {}) {
+  const rnd = rngFrom(seed);
+  const wall = pickOf(TIMBER, rnd);
+  const H = opts.h ?? 3.4;
+  const T = 0.4;
+  const hw = w / 2;
+  const hd = d / 2;
+  const p = [];
+
+  // which way is "out the front" in world terms
+  const fx = Math.sin(face);
+  const fz = Math.cos(face);
+  const sx = fz; // along the frontage
+  const sz = -fx;
+  const at = (along, out, y = 0, ...rest) => [x + sx * along + fx * out, z + sz * along + fz * out, ...rest, y];
+
+  const axis = Math.abs(fz) > 0.5 ? "x" : "z";
+  const cross = axis === "x" ? "z" : "x";
+
+  // front wall, split around a doorway
+  const doorW = 2.6;
+  const run = (w - doorW) / 2;
+  for (const side of [-1, 1]) {
+    const [px, pz] = at(side * (doorW / 2 + run / 2), hd);
+    p.push(...ruinWall(px, pz, axis, run, H, T, wall, rnd, { gap: 0.1, low: 0.12 }));
+  }
+  // and the three that are not the front
+  {
+    const [bx, bz] = at(0, -hd);
+    p.push(...ruinWall(bx, bz, axis, w, H, T, wall, rnd, { gap: 0.2, low: 0.16 }));
+  }
+  for (const side of [-1, 1]) {
+    const [px, pz] = at(side * hw, 0);
+    p.push(...ruinWall(px, pz, cross, d, H, T, wall, rnd, { gap: 0.16, low: 0.14 }));
+  }
+
+  // the false front: a flat parapet carried up over the roofline
+  {
+    const [px, pz] = at(0, hd);
+    p.push(box(px, pz, axis === "x" ? w + 0.5 : T, 1.9, axis === "x" ? T : w + 0.5, wall, 0, H));
+    p.push(box(px, pz, axis === "x" ? w + 0.9 : 0.55, 0.28, axis === "x" ? 0.55 : w + 0.9, PLANK, 0, H + 1.9));
+  }
+
+  // roof over the room, and the porch out front on its posts
+  {
+    const [rx, rz] = at(0, 0);
+    p.push({ ...box(rx, rz, w - 0.3, 0.26, d - 0.3, PLANK, 0, H), clip: true });
+    const [px, pz] = at(0, hd + 1.5);
+    p.push({ ...box(px, pz, axis === "x" ? w : 3.2, 0.22, axis === "x" ? 3.2 : w, PLANK, 0, 3.1), clip: false });
+    // boardwalk — low enough to step straight onto
+    p.push(box(px, pz, axis === "x" ? w + 1 : 3.4, 0.3, axis === "x" ? 3.4 : w + 1, PLANK));
+    for (const side of [-1, 1]) {
+      const [cx2, cz2] = at(side * (hw - 0.4), hd + 2.8);
+      p.push(box(cx2, cz2, 0.28, 3.1, 0.28, wall));
+    }
+  }
+
+  // something inside, so it is a room and not a shed
+  const [ix, iz] = at(-hw * 0.45, -hd * 0.35);
+  p.push(box(ix, iz, 2.4, 1.1, 0.7, PLANK)); // counter
+  const [jx, jz] = at(hw * 0.5, -hd * 0.5);
+  p.push(box(jx, jz, 0.5, 2.1, 1.6, wall)); // shelving
+  if (rnd() > 0.4) {
+    const [kx, kz] = at(hw * 0.2, hd * 0.2);
+    p.push(box(kx, kz, 1.4, 0.75, 0.9, PLANK, rnd() * 3)); // table
+  }
+  return p;
+}
+
+/*
+ * The church: a long nave under a pitched roof, a steeple over the door, and
+ * pews you can break line of sight behind.
+ */
+function chapel(x, z, seed) {
+  const rnd = rngFrom(seed);
+  const HW = 7;
+  const HD = 11;
+  const H = 5;
+  const T = 0.45;
+  const wall = 0x6e5b45;
+  const p = [];
+
+  const doorW = 2.8;
+  const run = HW - doorW / 2;
+  for (const side of [-1, 1]) {
+    p.push(...ruinWall(x + side * (doorW / 2 + run / 2), z + HD, "x", run, H, T, wall, rnd, { gap: 0.08, low: 0.1 }));
+  }
+  p.push(...ruinWall(x, z - HD, "x", HW * 2, H, T, wall, rnd, { gap: 0.18, low: 0.14 }));
+  for (const side of [-1, 1]) {
+    p.push(...ruinWall(x + side * HW, z, "z", HD * 2, H, T, wall, rnd, { gap: 0.14, low: 0.12 }));
+  }
+
+  // pitched roof, in rafters so nothing traps you underneath
+  for (let i = 0; i < 9; i++) {
+    const o = -HD * 0.85 + i * (HD * 0.21);
+    p.push({ ...box(x, z + o, HW * 2.1, 0.24, 0.3, 0x4a3728), y: H + 0.9, tilt: 0.34, clip: false });
+    p.push({ ...box(x, z + o, HW * 2.1, 0.24, 0.3, 0x4a3728), y: H + 0.9, tilt: -0.34, clip: false });
+  }
+
+  // the steeple over the door
+  p.push(
+    box(x, z + HD + 1.2, 4.2, H + 2.6, 4.2, wall),
+    box(x, z + HD + 1.2, 3.4, 2.2, 3.4, 0x5b4a38, 0, H + 2.6),
+    cone(x, z + HD + 1.2, 2.6, 4, 0x3f3a30, H + 4.8),
+  );
+
+  // pews down both sides, and an altar at the far end
+  for (let i = 0; i < 7; i++) {
+    const pz = z - HD * 0.72 + i * (HD * 0.2);
+    for (const side of [-1, 1]) {
+      p.push(box(x + side * HW * 0.45, pz, HW * 0.6, 0.55, 0.5, 0x4a3728));
+    }
+  }
+  p.push(
+    box(x, z - HD * 0.82, 3.2, 1.1, 1.1, 0x7a6a52),
+    box(x, z - HD * 0.82, 0.35, 1.8, 0.35, 0xb0a894, 0, 1.1),
+  );
+  return p;
+}
+
+/** A grave: a slab, a mound, and sometimes a leaning cross. */
+function grave(x, z, rnd) {
+  const out = [
+    box(x, z, 1.1, 0.9, 0.22, 0x8d8272, (rnd() - 0.5) * 0.5),
+    box(x, z - 1.1, 1.5, 0.26, 2.1, 0x4a4034, (rnd() - 0.5) * 0.4),
+  ];
+  if (rnd() > 0.6) {
+    out.push({ ...box(x + 0.9, z + 0.5, 0.18, 1.6, 0.18, 0x4a3728), tilt: 0.25, clip: false });
+  }
+  return out;
+}
+
+/*
+ * The mine head: four legs leaning in over the shaft, a winding wheel on top,
+ * and rails running away from it. The frame is scenery — you walk under it.
+ */
+function mineHead(x, z, seed) {
+  const rnd = rngFrom(seed);
+  const p = [];
+  const R = 3.4;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.78;
+    p.push({
+      ...box(x + Math.cos(a) * R, z + Math.sin(a) * R, 0.42, 9, 0.42, 0x4a3728),
+      tilt: 0.14,
+      clip: false,
+    });
+  }
+  p.push({ ...box(x, z, 7.4, 0.36, 0.5, 0x4a3728), y: 8.6, clip: false });
+  p.push({ ...box(x, z, 0.5, 0.36, 7.4, 0x4a3728), y: 8.6, clip: false });
+  p.push({ ...cyl(x, z, 1.6, 1.6, 0.4, 0x3a3a3a, 9), clip: false });
+
+  // the shaft mouth, boarded round the edge
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    p.push(box(x + Math.cos(a) * 2.6, z + Math.sin(a) * 2.6, 1.3, 0.7, 0.5, 0x55402e, -a));
+  }
+  // rails leading off towards the town
+  for (let i = 0; i < 16; i++) {
+    p.push(box(x + 5 + i * 2.2, z, 0.4, 0.16, 2.6, 0x3f3a30));
+  }
+  void rnd;
+  return p;
+}
+
+/** A run of mine timbering: two posts and a cap, repeated along a line. */
+function timbering(x1, z1, x2, z2, count) {
+  const out = [];
+  for (let i = 0; i <= count; i++) {
+    const k = i / count;
+    const x = x1 + (x2 - x1) * k;
+    const z = z1 + (z2 - z1) * k;
+    const a = Math.atan2(z2 - z1, x2 - x1) + Math.PI / 2;
+    for (const side of [-1, 1]) {
+      out.push(box(x + Math.cos(a) * side * 2.4, z + Math.sin(a) * side * 2.4, 0.42, 3.4, 0.42, 0x4a3728));
+    }
+    out.push({ ...box(x, z, Math.abs(Math.cos(a)) * 5.4 + 0.5, 0.4, Math.abs(Math.sin(a)) * 5.4 + 0.5, 0x4a3728), y: 3.4, clip: false });
   }
   return out;
 }
@@ -1223,6 +1443,8 @@ const cityBoxes = [];
 // its doorways ended up, so perks and paid doors land somewhere sensible.
 const forestMarks = [];
 const cityMarks = [];
+const townBoxes = [];
+const townMarks = [];
 
 const MAPS = [
   {
@@ -1357,6 +1579,130 @@ const MAPS = [
         const d = 16 + rnd() * 70;
         const s = 1 + rnd() * 0.9;
         return box(Math.cos(a) * d, Math.sin(a) * d, s, s, s, CRATE, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    /*
+     * A mining town that went down with the ground under it: one street of
+     * false-front buildings, a church and its graveyard at the top of it, and
+     * the mine it was all built for out to the east. The rock closes over the
+     * whole thing, which is why there is no sky and no horizon — just haze and
+     * the next building along.
+     */
+    id: "town",
+    name: "Buried Town",
+    blurb:
+      "A Western mining town that the ground swallowed. One street, a church, a graveyard, and the mine it was built for.",
+    half: 92,
+    ground: 0x4a4034,
+    sky: 0x0a0806,
+    fog: 0.0115,
+    light: 0.5,
+    start: [0, 46],
+    boxes: townBoxes,
+    marks: townMarks,
+    fires: [
+      [0, 34], [0, 12], [0, -12], [0, -34],
+      [-24, 4], [24, 30], [-6, -54], [50, -30], [0, 56],
+    ],
+    props: [
+      // ── the saloon: two floors, the perks, and the box upstairs ──
+      ...house(30, 0, 401, townBoxes, townMarks),
+
+      // ── the west side of the street ──
+      ...storefront(-24, 26, 15, 12, 11, Math.PI / 2), // general store
+      ...storefront(-24, 4, 14, 13, 23, Math.PI / 2), // bank
+      ...storefront(-24, -18, 12, 11, 37, Math.PI / 2), // miner's shack
+      ...storefront(-25, -38, 13, 12, 53, Math.PI / 2), // gunsmith
+
+      // ── the east side, either end of the saloon ──
+      ...storefront(24, 34, 13, 11, 71, -Math.PI / 2),
+      ...storefront(24, -32, 14, 12, 89, -Math.PI / 2),
+
+      // ── the church, at the top of the street ──
+      ...chapel(-4, -64, 101),
+
+      // ── the graveyard between the church and the town ──
+      ...scatter(26, 113, (rnd) => {
+        const gx = -4 + (rnd() - 0.5) * 34;
+        const gz = -46 + (rnd() - 0.5) * 16;
+        return grave(gx, gz, rnd);
+      }).flat(),
+      // a fence of leaning pickets round it
+      ...scatter(30, 127, (rnd) => {
+        const k = rnd();
+        const gx = -21 + k * 34;
+        return box(gx, -37 + Math.sin(k * 9) * 0.5, 0.9, 1.5, 0.16, 0x4a3728, (rnd() - 0.5) * 0.3);
+      }),
+
+      // ── the mine, out east, and the way in from the town ──
+      ...mineHead(64, -30, 131),
+      ...timbering(44, -30, 14, -30, 9),
+      ...timbering(64, -8, 64, 18, 7),
+
+      // ── the street itself: boardwalk, water trough, wagons, crates ──
+      ...scatter(22, 149, (rnd) => {
+        const z = 44 - rnd() * 88;
+        const side = rnd() > 0.5 ? 1 : -1;
+        return box(side * 9.5, z, 1.6, 0.28, 3.4, PLANK, 0);
+      }),
+      ...scatter(9, 163, (rnd) => {
+        const z = 40 - rnd() * 80;
+        const side = rnd() > 0.5 ? 1 : -1;
+        return box(side * 7, z, 3.4, 1, 1.5, 0x55402e, rnd() * 0.4);
+      }),
+      // wrecked wagons: a bed, and a wheel leaning off each end
+      ...scatter(7, 181, (rnd) => {
+        const x = (rnd() - 0.5) * 40;
+        const z = (rnd() - 0.5) * 80;
+        const r = rnd() * 3;
+        return [
+          box(x, z, 4.6, 1.2, 2.2, 0x55402e, r),
+          { ...cyl(x + 2, z + 1, 1.1, 1.1, 0.3, 0x3d2e22, 0.2), clip: false },
+          { ...cyl(x - 2, z - 1, 1.1, 1.1, 0.3, 0x3d2e22, 0.2), clip: false },
+        ];
+      }).flat(),
+      // crates and barrels against the buildings
+      ...scatter(40, 197, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 56;
+        const s = 0.9 + rnd() * 0.8;
+        return rnd() > 0.5
+          ? box(Math.cos(a) * d, Math.sin(a) * d, s, s, s, CRATE, rnd() * 3)
+          : cyl(Math.cos(a) * d, Math.sin(a) * d, s * 0.5, s * 0.55, s * 1.3, 0x5e4632);
+      }),
+
+      // ── the cavern: rock heaped round the rim and pillars holding it up ──
+      ...scatter(44, 211, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 70 + rnd() * 20;
+        return rocks(Math.cos(a) * d, Math.sin(a) * d, 2.4 + rnd() * 2.6, rnd);
+      }).flat(),
+      ...scatter(16, 223, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 48 + rnd() * 32;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        // pillars of untouched rock, wide at the base, holding up the roof
+        return [
+          cyl(x, z, 2.2, 4.2, 16, pickOf(ROCK, rnd)),
+          { ...cone(x, z, 5, 7, pickOf(ROCK, rnd), 15), clip: false },
+        ];
+      }).flat(),
+      // rubble slopes you can walk up, banked against the rim
+      ...scatter(26, 239, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 62 + rnd() * 14;
+        const s = 2 + rnd() * 3;
+        return box(Math.cos(a) * d, Math.sin(a) * d, s * 2.2, s * 0.5, s * 1.8, 0x5a5044, rnd() * 3);
+      }),
+      // and loose stone underfoot everywhere
+      ...scatter(60, 251, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 62;
+        const s = 0.4 + rnd() * 0.7;
+        return box(Math.cos(a) * d, Math.sin(a) * d, s, 0.26, s * 0.8, pickOf(ROCK, rnd), rnd() * 3);
       }),
     ],
   },
@@ -1999,6 +2345,18 @@ function rollKind() {
 
 const CORPSE_TIME = 60; // how long a body lies there before it fades
 const REVIVE_TIME = 5; // a Reviver gets back up this long after falling
+/*
+ * How long a zombie may go nowhere before it is dug up and sent back in.
+ *
+ * There is always one last zombie you cannot find. It is wedged between two
+ * pieces of furniture, or standing on a stair tread it cannot get off, or it
+ * came up inside a wall — and the wave will not end until it is dead, so the
+ * game stops. Rather than chase every way that can happen, watch for a zombie
+ * that is not getting anywhere and put it back on the map near you.
+ */
+const STUCK_TIME = 6;
+const STUCK_DIST = 0.9; // moved less than this in that time counts as stuck
+
 const MAX_LIVE = 16; // how many can be on their feet at once
 const MAX_CORPSES = 10; // bodies left lying about before the oldest fade
 
@@ -2021,6 +2379,50 @@ function trimCorpses() {
   }
 }
 
+/*
+ * Somewhere out on the perimeter, clear of the player and clear of anything
+ * solid. Coming up inside a wall is one of the ways a zombie ends up somewhere
+ * it can never walk out of.
+ */
+function pickSpawnPoint(minFromPlayer = 15) {
+  const ring = HALF * 0.82;
+  let best = [0, 0];
+  for (let tries = 0; tries < 40; tries++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = ring * (0.75 + Math.random() * 0.25);
+    const x = Math.cos(a) * d;
+    const z = Math.sin(a) * d;
+    best = [x, z];
+    if (Math.hypot(x - player.pos.x, z - player.pos.z) < minFromPlayer) continue;
+    if (spotIsClear(x, z, 0.9)) return [x, z];
+  }
+  return best;
+}
+
+/*
+ * Take a zombie that is going nowhere and bury it somewhere it can walk out
+ * of. It keeps its health and its kind — this is not a fresh one, it is the
+ * same one dug up and put back where it can reach you. Closer than a normal
+ * spawn, because the usual reason you notice is that it is the last one left
+ * and you have been looking for it.
+ */
+function digOutZombie(z) {
+  const [x, zz] = pickSpawnPoint(12);
+  z.group.position.set(x, -BURIED, zz);
+  z.y = -BURIED;
+  z.vy = 0;
+  z.grounded = true;
+  z.climbing = false;
+  z.rising = RISE_TIME * 0.6;
+  z.stuckFor = 0;
+  z.lastX = x;
+  z.lastZ = zz;
+  z.blocked = false;
+  z.flank = 0;
+  spatter(new THREE.Vector3(x, 0.15, zz), new THREE.Vector3(0, 1, 0), 10, dirtMat);
+  sfx.dig(Math.hypot(x - player.pos.x, zz - player.pos.z));
+}
+
 function spawnZombie(wave) {
   const kind = wave >= 3 ? rollKind() : "walker";
   const type = ZOMBIE_TYPES[kind];
@@ -2029,18 +2431,7 @@ function spawnZombie(wave) {
   const scale = type.scale;
   model.group.scale.setScalar(scale);
 
-  // spawn on the perimeter, clear of the player
-  const ring = HALF * 0.82;
-  let x,
-    z,
-    tries = 0;
-  do {
-    const a = Math.random() * Math.PI * 2;
-    const d = ring * (0.75 + Math.random() * 0.25);
-    x = Math.cos(a) * d;
-    z = Math.sin(a) * d;
-    tries++;
-  } while (tries < 30 && Math.hypot(x - player.pos.x, z - player.pos.z) < 15);
+  const [x, z] = pickSpawnPoint();
 
   model.group.position.set(x, -BURIED, z);
   scene.add(model.group);
@@ -2082,7 +2473,12 @@ function spawnZombie(wave) {
     climbing: false,
     flash: 0,
     dying: 0,
+    finished: false,
     growlCd: Math.random() * 6,
+    // watched, so one that wedges itself can be dug out again
+    stuckFor: 0,
+    lastX: x,
+    lastZ: z,
   };
 
   model.torso.userData.zombie = z0;
@@ -3615,6 +4011,22 @@ function updateZombies(dt) {
       for (const m of z.flashMats) m.emissive.setRGB(z.flash * 0.9, 0, 0);
     }
 
+    /*
+     * Getting nowhere. Standing still while attacking is fine — that is what
+     * it is meant to be doing — but a zombie out of reach that has not moved
+     * has wedged itself somewhere, and the wave cannot end until it dies.
+     * Fallen out of the world counts too.
+     */
+    const moved = Math.hypot(g.position.x - z.lastX, g.position.z - z.lastZ);
+    if (moved > STUCK_DIST || dist < 2) {
+      z.stuckFor = 0;
+      z.lastX = g.position.x;
+      z.lastZ = g.position.z;
+    } else {
+      z.stuckFor += dt;
+    }
+    if (z.stuckFor > STUCK_TIME || z.y < -8) digOutZombie(z);
+
     // occasional growl, quieter with distance
     z.growlCd -= dt;
     if (z.growlCd <= 0) {
@@ -4580,7 +4992,7 @@ function beginPlay() {
   inLobby = false;
   game.running = true;
   clock.getDelta(); // drop the accumulated idle time
-  if (!touchMode) controls.lock();
+  grabMouse();
   audio();
 }
 
@@ -5850,7 +6262,7 @@ function reviveWithToken() {
   ui.dead.classList.add("hidden");
   game.running = true;
   clock.getDelta();
-  if (!touchMode) controls.lock();
+  grabMouse();
   sfx.unlock();
   toast(`REVIVED — ${MAX_REVIVES - game.revivesUsed} LEFT THIS GAME`);
   syncHud();
@@ -5891,7 +6303,13 @@ if (import.meta.env.DEV) {
     startWave,
     spawnZombie,
     killZombie,
+    digOutZombie,
     resetGame,
+    endGame,
+    reviveWithToken,
+    shopState: shop,
+    hasToken,
+    STUCK_TIME,
     bonus,
     bonusActive,
     lure,
