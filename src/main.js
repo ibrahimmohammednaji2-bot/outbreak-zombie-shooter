@@ -19,6 +19,7 @@ import {
   keepCurrentProgress,
   COINS_PER_WAVE,
 } from "./skins.js";
+import { bank, saveBank } from "./bank.js";
 import {
   account,
   signedIn,
@@ -276,6 +277,26 @@ const WEAPONS = [
     tone: 240,
   },
   {
+    // Built, not bought. A wall of moving air that shreds whatever is close
+    // and nothing that is not, and it has to be let go of before it cooks.
+    id: "jetgun",
+    name: "Jet Gun",
+    damage: 260,
+    headMult: 1,
+    rpm: 0.06,
+    mag: 90, // seconds of running, near enough
+    reserve: 900,
+    pellets: 3,
+    spread: 0.16,
+    auto: true,
+    reload: 4.5, // cooling down, not reloading
+    recoil: 0.02,
+    pickup: 0,
+    volume: 0.85,
+    tone: 140,
+    built: true,
+  },
+  {
     id: "auto12",
     name: "Auto Shotgun",
     damage: 14,
@@ -497,15 +518,20 @@ const weaponById = (id) => WEAPONS.find((w) => w.id === id) ?? WEAPONS[0];
  * the world in depends on what it is: a sniper brings it right up, a submachine
  * gun barely at all.
  */
-const NO_SIGHTS = new Set(["knife", "pistol", "magnum", "shotgun", "dbarrel", "auto12"]);
-const ZOOM = {
-  sniper: 0.34,
-  rpd: 0.6, dingo: 0.6, mg42: 0.6,
-  ak47: 0.62, m4: 0.62, scar: 0.62,
-  mp5: 0.74, vector: 0.74, uzi: 0.74,
+const NO_SIGHTS = new Set(["knife"]); // everything but the knife has sights
+
+/*
+ * How much closer each gun brings the world, as a magnification. A pistol or a
+ * shotgun barely bothers — you are lining up, not reaching out — and a sniper
+ * does what a sniper is for.
+ */
+const MAGNIFY = {
+  pistol: 1.5, magnum: 1.5, shotgun: 1.5, dbarrel: 1.5, auto12: 1.5,
+  sniper: 6,
 };
 const hasSights = (w) => !!w && !NO_SIGHTS.has(w.id);
-const zoomOf = (w) => (hasSights(w) ? (ZOOM[w.id] ?? 0.72) : 1);
+const magnifyOf = (w) => (hasSights(w) ? (MAGNIFY[w.id] ?? 3) : 1);
+const zoomOf = (w) => 1 / magnifyOf(w);
 
 const AIM_SPREAD = 0.22; // what is left of the cone once you are on the sights
 const AIM_WALK = 0.55; // you move like this while looking down them
@@ -534,8 +560,49 @@ function startingSlots() {
   ];
 }
 
+/*
+ * A slot holds an id, its ammo, and — once it has been through the
+ * Pack-a-Punch — an `up` object of upgraded stats. Everything that wants to
+ * know what a gun does asks here rather than looking the id up itself, so an
+ * upgraded gun behaves like the upgrade everywhere at once.
+ */
+const weaponFor = (slot) => slot?.up ?? weaponById(slot?.id ?? "pistol");
 const curSlot = () => game.slots[game.weapon];
-const curWeapon = () => weaponById(curSlot().id);
+const curWeapon = () => weaponFor(curSlot());
+
+const PAP_COST = 5000;
+const PAP_REFILL = 2500; // topping up a gun that has already been through it
+
+// what the machine does to a gun
+function packedVersion(id) {
+  const w = weaponById(id);
+  return {
+    ...w,
+    id: w.id,
+    name: papName(w.name),
+    damage: w.damage * 2,
+    mag: Math.round(w.mag * 2),
+    reserve: Math.round(w.reserve * 2),
+    spread: w.spread * 0.75,
+    recoil: w.recoil * 0.8,
+    reload: w.reload * 0.85,
+    pickup: Math.round(w.pickup * 1.6),
+    packed: true,
+  };
+}
+
+/*
+ * Upgraded guns get a new name, the way they always have. Built rather than
+ * listed: twenty-one weapons and a table would drift out of step the moment
+ * one is added.
+ */
+const PAP_PREFIX = ["Ultra", "Widow", "Reaper", "Malice", "Vulture", "Havoc", "Cinder", "Warden"];
+const PAP_SUFFIX = ["Maker", "Bringer", "Sting", "Wail", "Fang", "Roar", "Cutter", "Ruin"];
+function papName(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return `${PAP_PREFIX[h % PAP_PREFIX.length]}-${PAP_SUFFIX[(h >> 5) % PAP_SUFFIX.length]}`;
+}
 
 /* ── crash reporting ──────────────────────────────────────────
  * A thrown error used to leave a dead screen with no explanation.
@@ -2357,7 +2424,19 @@ const REVIVE_TIME = 5; // a Reviver gets back up this long after falling
 const STUCK_TIME = 6;
 const STUCK_DIST = 0.9; // moved less than this in that time counts as stuck
 
-const MAX_LIVE = 16; // how many can be on their feet at once
+/*
+ * How many are allowed on their feet at once, and how fast they come.
+ *
+ * A wave used to arrive all together: the whole round's worth clawing up in
+ * the first few seconds, which is a wall rather than a fight, and the reason
+ * the early rounds felt heavier than the map could carry. It builds now — a
+ * handful on the first rounds, the full crowd only once you are deep in.
+ */
+const MAX_LIVE_CAP = 16;
+const liveCap = () => Math.min(MAX_LIVE_CAP, 5 + Math.floor(game.wave * 1.2));
+const spawnGap = () => Math.max(0.5, 1.7 - game.wave * 0.05) * game.diff.rate;
+
+const MAX_LIVE = MAX_LIVE_CAP; // kept for anything still reading it
 const MAX_CORPSES = 10; // bodies left lying about before the oldest fade
 
 /*
@@ -2517,6 +2596,144 @@ const wallBuys = [];
 const WALL_GUN = "dbarrel"; // the double barrel, hung inside the house
 const WALL_GUN_COST = 500;
 
+/* ── the Pack-a-Punch, and the bank ──────────────────────────── */
+
+const packMachines = [];
+const bankTellers = [];
+
+function addPackMachine(x, z, y = 0) {
+  const mat = new THREE.MeshLambertMaterial({
+    color: 0x3f8f5a, emissive: 0x1d5c33, emissiveIntensity: 0.5,
+  });
+  const body = new THREE.Mesh(UNIT_BOX, mat);
+  body.scale.set(2.4, 2.6, 1.6);
+  body.position.set(x, y + 1.3, z);
+  body.castShadow = true;
+  mapGroup.add(body);
+
+  // the mouth you feed a gun into
+  const slot = new THREE.Mesh(UNIT_BOX, new THREE.MeshBasicMaterial({ color: 0x9dffc4 }));
+  slot.scale.set(1.5, 0.18, 0.1);
+  slot.position.set(x, y + 1.6, z + 0.85);
+  mapGroup.add(slot);
+
+  const glow = new THREE.PointLight(0x5fd77a, 3, 14, 2);
+  glow.position.set(x, y + 2.8, z);
+  mapGroup.add(glow);
+
+  obstacles.push({ x, z, hw: 1.25, hd: 0.85, bottom: y, top: y + 2.6, cos: 1, sin: 0 });
+  packMachines.push({ x, z, y, glow });
+}
+
+function packCurrentWeapon() {
+  const slot = curSlot();
+  const w = curWeapon();
+  // the guard belongs here, not in the prompt that happens to call it
+  if (!quest.powered) {
+    sfx.dryFire();
+    toast("IT NEEDS POWER");
+    return;
+  }
+  if (w.melee) {
+    toast("NOT THE KNIFE");
+    sfx.dryFire();
+    return;
+  }
+
+  if (slot.up) {
+    // already been through: this is a refill, at half the price
+    if (game.points < PAP_REFILL) {
+      sfx.dryFire();
+      toast(`NEED ${PAP_REFILL - game.points} MORE POINTS`);
+      return;
+    }
+    game.points -= PAP_REFILL;
+    slot.mag = slot.up.mag;
+    slot.reserve = slot.up.reserve;
+    game.reloadTimer = 0;
+    sfx.unlock();
+    toast(`${slot.up.name.toUpperCase()} — FILLED`);
+    syncHud();
+    return;
+  }
+
+  if (game.points < PAP_COST) {
+    sfx.dryFire();
+    toast(`NEED ${PAP_COST - game.points} MORE POINTS`);
+    return;
+  }
+  game.points -= PAP_COST;
+  slot.up = packedVersion(slot.id);
+  slot.mag = slot.up.mag;
+  slot.reserve = slot.up.reserve;
+  game.reloadTimer = 0;
+
+  sfx.unlock();
+  banner(slot.up.name.toUpperCase(), 1800);
+  toast("PACKED A PUNCH");
+  renderLoadout();
+  syncHud();
+}
+
+/*
+ * The bank. Points are gone the moment you die; what is in the bank is not.
+ * You can only ever take out what you put in, so it is a way to carry a good
+ * run forward, not a way to print points.
+ */
+const BANK_STEP = 1000;
+
+function addBankTeller(x, z, y = 0) {
+  const mat = new THREE.MeshLambertMaterial({
+    color: 0xc9a227, emissive: 0x4a3a06, emissiveIntensity: 0.4,
+  });
+  const desk = new THREE.Mesh(UNIT_BOX, mat);
+  desk.scale.set(3, 1.2, 1);
+  desk.position.set(x, y + 0.6, z);
+  desk.castShadow = true;
+  mapGroup.add(desk);
+
+  const grille = new THREE.Mesh(UNIT_BOX, new THREE.MeshBasicMaterial({ color: 0xffd76b }));
+  grille.scale.set(2.4, 1.1, 0.1);
+  grille.position.set(x, y + 1.75, z);
+  mapGroup.add(grille);
+
+  const glow = new THREE.PointLight(0xffc94a, 2.2, 11, 2);
+  glow.position.set(x, y + 2.4, z);
+  mapGroup.add(glow);
+
+  obstacles.push({ x, z, hw: 1.5, hd: 0.55, bottom: y, top: y + 1.2, cos: 1, sin: 0 });
+  bankTellers.push({ x, z, y, glow });
+}
+
+function useBank(withdraw) {
+  if (withdraw) {
+    const take = Math.min(BANK_STEP, bank.points);
+    if (take <= 0) {
+      sfx.dryFire();
+      toast("NOTHING IN THE BANK");
+      return;
+    }
+    bank.points -= take;
+    game.points += take;
+    saveBank();
+    sfx.unlock();
+    toast(`WITHDREW ${take} · ${bank.points} LEFT`);
+  } else {
+    const put = Math.min(BANK_STEP, game.points);
+    if (put < BANK_STEP) {
+      sfx.dryFire();
+      toast(`NEED ${BANK_STEP} POINTS TO DEPOSIT`);
+      return;
+    }
+    game.points -= put;
+    bank.points += put;
+    saveBank();
+    sfx.unlock();
+    toast(`DEPOSITED ${put} · ${bank.points} BANKED`);
+  }
+  syncHud();
+}
+
 /*
  * A slab, and the box that blocks you, agreeing about which way they face.
  *
@@ -2615,6 +2832,388 @@ function buyWallGun(wb) {
   syncHud();
 }
 
+/* ── buildables, the prisoner, the train, and the quest ──────── */
+
+/*
+ * Parts lie about the map. Carry them to a workbench and it assembles
+ * whatever you have a full set for. The Turbine is the one that matters
+ * first: nothing in this town has power until it is running.
+ */
+const BUILDABLES = [
+  { id: "turbine", name: "Turbine", parts: 3, blurb: "Powers the Pack-a-Punch" },
+  { id: "jetgun", name: "Jet Gun", parts: 4, blurb: "A wall of moving air" },
+];
+const buildableById = (id) => BUILDABLES.find((b) => b.id === id);
+
+const partPickups = []; // lying on the ground, waiting to be walked over
+const carried = {}; // id → how many of its parts you have
+const built = new Set();
+const workbenches = [];
+const turbineSockets = [];
+const trainStops = [];
+
+const quest = { step: 0, powered: false, leroyFree: false, vaultOpen: false, won: false };
+
+/*
+ * The quest, in order. Each line is one thing to do and the words shown while
+ * it is the thing to do. Nothing here is hidden — a quest you cannot see the
+ * shape of is a quest nobody finishes.
+ */
+const QUEST_STEPS = [
+  { id: "turbine", text: "Find three turbine parts and build it at a workbench" },
+  { id: "power", text: "Carry the turbine to the Pack-a-Punch and switch it on" },
+  { id: "leroy", text: "Pay out the prisoner in the gunsmith — he owes nobody anything" },
+  { id: "vault", text: "Walk him to the bank vault and let him take the door off" },
+  { id: "jetgun", text: "Find four jet gun parts and build it" },
+  { id: "boss", text: "Put down whatever comes up out of the mine" },
+  { id: "train", text: "Get to the mine head and take the train out" },
+];
+const questStep = () => QUEST_STEPS[quest.step] ?? null;
+
+function advanceQuest(id) {
+  if (questStep()?.id !== id) return;
+  quest.step++;
+  sfx.waveClear();
+  const next = questStep();
+  banner(next ? "STEP DONE" : "THE WAY OUT IS OPEN", 2200);
+  if (next) toast(next.text.toUpperCase());
+
+  // whatever the mine has been holding comes up when the jet gun is finished
+  if (next?.id === "boss") sendUpTheBoss();
+  updateQuestHud();
+}
+
+function sendUpTheBoss() {
+  const z = spawnZombie(Math.max(8, game.wave));
+  z.kind = "bigdude";
+  z.questBoss = true;
+  z.hp = z.maxHp = z.maxHp * 3;
+  z.group.scale.setScalar(2.4);
+  z.radius = 1.1;
+  banner("SOMETHING CAME UP", 2400);
+}
+
+function updateQuestHud() {
+  const el = $("quest");
+  if (!el) return;
+  const s = questStep();
+  const show = game.running && !game.over && !game.dm && s;
+  el.classList.toggle("hidden", !show);
+  if (show) {
+    el.innerHTML =
+      `<b>${quest.step + 1}/${QUEST_STEPS.length}</b>${s.text}` +
+      (carriedLine() ? `<span class="carry">${carriedLine()}</span>` : "");
+  }
+}
+
+function carriedLine() {
+  const bits = [];
+  for (const b of BUILDABLES) {
+    const n = carried[b.id] ?? 0;
+    if (n > 0 && !built.has(b.id)) bits.push(`${b.name} ${n}/${b.parts}`);
+  }
+  if (built.has("turbine") && !quest.powered) bits.push("Turbine in hand");
+  return bits.join(" · ");
+}
+
+/** Scatter one buildable's parts around the map, well apart. */
+function scatterParts(def, seed) {
+  const rnd = rngFrom(seed);
+  for (let i = 0; i < def.parts; i++) {
+    const a = (i / def.parts) * Math.PI * 2 + rnd() * 0.8;
+    const [x, z] = clearSpot(a, HALF * (0.35 + rnd() * 0.35));
+
+    const mat = new THREE.MeshLambertMaterial({
+      color: def.id === "turbine" ? 0x6fd3ff : 0xffb43c,
+      emissive: def.id === "turbine" ? 0x1d4a5c : 0x4a3206,
+      emissiveIntensity: 0.6,
+    });
+    const mesh = new THREE.Mesh(UNIT_BOX, mat);
+    mesh.scale.set(0.8, 0.4, 0.55);
+    mesh.position.set(x, 0.55, z);
+    mapGroup.add(mesh);
+
+    const glow = new THREE.PointLight(def.id === "turbine" ? 0x6fd3ff : 0xffb43c, 1.8, 8, 2);
+    glow.position.set(x, 0.9, z);
+    mapGroup.add(glow);
+
+    partPickups.push({ id: def.id, x, z, mesh, mat, glow, taken: false });
+  }
+}
+
+function updateParts(dt) {
+  for (const p of partPickups) {
+    if (p.taken) continue;
+    p.mesh.rotation.y += dt * 1.6;
+    p.mesh.position.y = 0.55 + Math.sin(game.time * 2.4 + p.x) * 0.12;
+    if (Math.hypot(p.x - player.pos.x, p.z - player.pos.z) > 2.2) continue;
+    if (Math.abs(player.pos.y) > 2.5) continue;
+
+    p.taken = true;
+    mapGroup.remove(p.mesh, p.glow);
+    p.mat.dispose();
+    carried[p.id] = (carried[p.id] ?? 0) + 1;
+    const def = buildableById(p.id);
+    sfx.unlock();
+    toast(`${def.name.toUpperCase()} PART ${carried[p.id]}/${def.parts}`);
+    updateQuestHud();
+  }
+}
+
+function addWorkbench(x, z, y = 0) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x6b5233 });
+  const top = new THREE.Mesh(UNIT_BOX, mat);
+  top.scale.set(3.2, 0.9, 1.4);
+  top.position.set(x, y + 0.45, z);
+  top.castShadow = top.receiveShadow = true;
+  mapGroup.add(top);
+
+  const glow = new THREE.PointLight(0xffd28a, 1.4, 8, 2);
+  glow.position.set(x, y + 1.7, z);
+  mapGroup.add(glow);
+
+  obstacles.push({ x, z, hw: 1.6, hd: 0.7, bottom: y, top: y + 0.9, cos: 1, sin: 0 });
+  workbenches.push({ x, z, y, glow });
+}
+
+/** What the bench would make right now, or null. */
+function benchReady() {
+  for (const b of BUILDABLES) {
+    if (built.has(b.id)) continue;
+    if ((carried[b.id] ?? 0) >= b.parts) return b;
+  }
+  return null;
+}
+
+function buildAtBench() {
+  const def = benchReady();
+  if (!def) {
+    sfx.dryFire();
+    const missing = BUILDABLES.filter((b) => !built.has(b.id))
+      .map((b) => `${b.name} ${carried[b.id] ?? 0}/${b.parts}`)
+      .join(" · ");
+    toast(missing ? `STILL NEED — ${missing}` : "NOTHING LEFT TO BUILD");
+    return;
+  }
+  built.add(def.id);
+  sfx.unlock();
+  banner(`${def.name.toUpperCase()} BUILT`, 2000);
+
+  if (def.id === "jetgun") {
+    const w = weaponById("jetgun");
+    const target = curWeapon().melee ? 0 : game.weapon;
+    viewmodels[game.slots[target].id].visible = false;
+    game.slots[target] = { id: "jetgun", mag: w.mag, reserve: w.reserve };
+    game.weapon = target;
+    viewmodels.jetgun.visible = true;
+    game.reloadTimer = 0;
+    renderLoadout();
+    syncHud();
+    advanceQuest("jetgun");
+  } else {
+    toast(def.blurb.toUpperCase());
+    advanceQuest("turbine");
+  }
+  updateQuestHud();
+}
+
+function addTurbineSocket(x, z, y = 0) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x3a4a55, emissive: 0x101c24 });
+  const pad = new THREE.Mesh(UNIT_BOX, mat);
+  pad.scale.set(1.8, 0.3, 1.8);
+  pad.position.set(x, y + 0.15, z);
+  mapGroup.add(pad);
+  turbineSockets.push({ x, z, y, pad, mat, live: false });
+}
+
+function placeTurbine(socket) {
+  if (!built.has("turbine")) {
+    sfx.dryFire();
+    toast("BUILD THE TURBINE FIRST");
+    return;
+  }
+  if (quest.powered) return;
+  quest.powered = true;
+  socket.live = true;
+  socket.mat.color.setHex(0x6fd3ff);
+  socket.mat.emissive.setHex(0x2b6a86);
+
+  const spin = new THREE.Mesh(UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0x8fdcff, emissive: 0x2b6a86 }));
+  spin.scale.set(0.7, 1.6, 0.7);
+  spin.position.set(socket.x, socket.y + 1, socket.z);
+  mapGroup.add(spin);
+  socket.spin = spin;
+
+  const glow = new THREE.PointLight(0x6fd3ff, 4, 18, 2);
+  glow.position.set(socket.x, socket.y + 2.2, socket.z);
+  mapGroup.add(glow);
+
+  sfx.unlock();
+  banner("POWER ON", 2200);
+  toast("THE PACK-A-PUNCH IS LIVE");
+  advanceQuest("power");
+}
+
+/*
+ * The prisoner. He has been down here longer than the town has, he is twice
+ * the size of anything else walking, and he is not on the zombies' side. Pay
+ * off the lock and he follows you about, takes apart whatever gets close, and
+ * puts his shoulder through anything boarded up.
+ */
+const LEROY_COST = 2000;
+const leroy = { alive: false, group: null, x: 0, z: 0, y: 0, swingCd: 0, cell: null };
+
+function addLeroyCell(x, z, y = 0) {
+  const bars = new THREE.Mesh(UNIT_BOX, new THREE.MeshLambertMaterial({ color: 0x5a5f66 }));
+  bars.scale.set(3.4, 3, 0.3);
+  bars.position.set(x, y + 1.5, z + 1.6);
+  mapGroup.add(bars);
+
+  const him = buildZombie("bigdude");
+  him.group.scale.setScalar(2);
+  him.group.position.set(x, y, z);
+  scene.add(him.group);
+  for (const m of him.mats) m.color.offsetHSL(0, -0.3, 0.05);
+
+  leroy.cell = { x, z, y, bars, group: him.group, model: him };
+  leroy.alive = false;
+  obstacles.push({ x, z: z + 1.6, hw: 1.7, hd: 0.2, bottom: y, top: y + 3, cos: 1, sin: 0 });
+}
+
+function freeLeroy() {
+  if (leroy.alive || !leroy.cell) return;
+  if (game.points < LEROY_COST) {
+    sfx.dryFire();
+    toast(`NEED ${LEROY_COST - game.points} MORE POINTS`);
+    return;
+  }
+  game.points -= LEROY_COST;
+  leroy.alive = true;
+  leroy.group = leroy.cell.group;
+  leroy.x = leroy.cell.x;
+  leroy.z = leroy.cell.z;
+  leroy.y = leroy.cell.y;
+
+  mapGroup.remove(leroy.cell.bars);
+  const i = obstacles.findIndex((o) => o.x === leroy.cell.x && o.z === leroy.cell.z + 1.6);
+  if (i !== -1) obstacles.splice(i, 1);
+  buildGrid();
+
+  sfx.unlock();
+  banner("HE IS OUT", 2200);
+  toast("HE FOLLOWS YOU NOW");
+  advanceQuest("leroy");
+  syncHud();
+}
+
+function updateLeroy(dt) {
+  if (!leroy.alive || !leroy.group) return;
+  const g = leroy.group;
+  const dx = player.pos.x - g.position.x;
+  const dz = player.pos.z - g.position.z;
+  const d = Math.hypot(dx, dz);
+
+  // he keeps up, but he does not crowd you
+  if (d > 4) {
+    const k = (dt * 3.6) / d;
+    g.position.x += dx * k;
+    g.position.z += dz * k;
+    pushOut(g.position, 1.1, leroy.y);
+  }
+  g.rotation.y = Math.atan2(dx, dz);
+  g.position.y = leroy.y + Math.abs(Math.sin(game.time * 4)) * 0.09;
+  leroy.x = g.position.x;
+  leroy.z = g.position.z;
+
+  // anything within arm's reach gets taken apart
+  leroy.swingCd -= dt;
+  if (leroy.swingCd <= 0) {
+    for (const z of [...zombies]) {
+      if (z.dying > 0) continue;
+      if (z.group.position.distanceTo(g.position) > 4.5) continue;
+      leroy.swingCd = 0.8;
+      spatter(z.group.position, new THREE.Vector3(0, 1, 0), 12);
+      sfx.flesh();
+      killZombie(z);
+      break;
+    }
+  }
+
+  // and he walks through anything boarded up, for nothing
+  for (const b of barriers) {
+    if (b.bought) continue;
+    if (Math.hypot(b.x - g.position.x, b.z - g.position.z) > 4) continue;
+    b.bought = true;
+    mapGroup.remove(b.mesh);
+    b.mat.dispose();
+    const i = obstacles.indexOf(b.obs);
+    if (i !== -1) obstacles.splice(i, 1);
+    buildGrid();
+    sfx.explosion();
+    toast("HE TOOK THE BOARDS OFF");
+    if (b.vault) {
+      quest.vaultOpen = true;
+      advanceQuest("vault");
+    }
+    break;
+  }
+}
+
+/*
+ * The way out. It only runs once the quest is done, and it costs — an ending
+ * you can buy is still an ending you have to earn the fare for.
+ */
+const TRAIN_FARE = 15000;
+
+function addTrainStop(x, z, y = 0) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2a2f38, emissive: 0x0a1218 });
+  const car = new THREE.Mesh(UNIT_BOX, mat);
+  car.scale.set(9, 4, 3.4);
+  car.position.set(x, y + 2, z);
+  car.castShadow = true;
+  mapGroup.add(car);
+
+  const lamp = new THREE.PointLight(0xbfe6ff, 2.6, 16, 2);
+  lamp.position.set(x - 5, y + 3, z);
+  mapGroup.add(lamp);
+
+  obstacles.push({ x, z, hw: 4.5, hd: 1.7, bottom: y, top: y + 4, cos: 1, sin: 0 });
+  trainStops.push({ x, z, y, car, mat, lamp });
+}
+
+function boardTrain() {
+  if (quest.step < QUEST_STEPS.length - 1) {
+    sfx.dryFire();
+    toast(`NOT YET — ${questStep()?.text.toUpperCase() ?? ""}`);
+    return;
+  }
+  if (game.points < TRAIN_FARE) {
+    sfx.dryFire();
+    toast(`THE FARE IS ${TRAIN_FARE} — ${TRAIN_FARE - game.points} SHORT`);
+    return;
+  }
+  game.points -= TRAIN_FARE;
+  quest.won = true;
+  advanceQuest("train");
+  winRun();
+}
+
+function winRun() {
+  game.over = true;
+  game.running = false;
+  controls.unlock();
+  earnCoins(200);
+  const h1 = ui.dead.querySelector("h1");
+  h1.textContent = "YOU GOT OUT";
+  h1.className = "";
+  ui.deadWave.textContent = game.wave;
+  ui.deadKills.textContent = game.kills;
+  $("revive-btn").classList.add("hidden");
+  sfx.waveClear();
+  toast("+200 COINS");
+  ui.dead.classList.remove("hidden");
+}
+
 const spotScratch = new THREE.Vector3();
 
 /** Is there room to stand something of this size here? */
@@ -2687,6 +3286,18 @@ function placePerkMachines() {
   perkMachines.length = 0;
   barriers.length = 0;
   wallBuys.length = 0;
+  packMachines.length = 0;
+  bankTellers.length = 0;
+  workbenches.length = 0;
+  turbineSockets.length = 0;
+  trainStops.length = 0;
+  partPickups.length = 0;
+  built.clear();
+  for (const k of Object.keys(carried)) delete carried[k];
+  Object.assign(quest, { step: 0, powered: false, leroyFree: false, vaultOpen: false, won: false });
+  leroy.alive = false;
+  leroy.cell = null;
+  leroy.group = null;
   if (game.dm) return; // a free-for-all has no points and no perks
 
   const perk = (id) => PERKS_FOR_SALE.find((p) => p.id === id);
@@ -2721,6 +3332,46 @@ function placePerkMachines() {
   const sa = Math.random() * Math.PI * 2;
   const [sx, sz] = clearSpot(sa, HALF * 0.62);
   addPerkMachine(perk("stamin"), sx, sz);
+
+  placeTownWorks();
+}
+
+/*
+ * Everything the quest runs on. It goes on every map, not just the town —
+ * the same machinery reads well anywhere, and a map you cannot finish the
+ * quest on would just be the odd one out.
+ */
+function placeTownWorks() {
+  const spoke = (a, r) => clearSpot(a, HALF * r);
+
+  // the Pack-a-Punch, and the socket the turbine goes in beside it
+  const [px, pz] = spoke(2.1, 0.4);
+  addPackMachine(px, pz);
+  const [tx, tz] = clearNear(px + 4, pz, 1.2, 5);
+  addTurbineSocket(tx, tz);
+
+  // the bank, and the vault door he takes off for you
+  const [bx, bz] = spoke(-1.1, 0.45);
+  addBankTeller(bx, bz);
+  const vaultA = Math.atan2(bz, bx);
+  addBarrier(bx + Math.cos(vaultA) * 3.4, bz + Math.sin(vaultA) * 3.4, 0, 2.2, 0.5, 3, 1500, vaultA + Math.PI / 2);
+  barriers[barriers.length - 1].vault = true;
+
+  // two benches, well apart, so parts are worth carrying
+  const [w1x, w1z] = spoke(0.5, 0.3);
+  addWorkbench(w1x, w1z);
+  const [w2x, w2z] = spoke(3.6, 0.55);
+  addWorkbench(w2x, w2z);
+
+  // the cell, and the way out at the far end of the map
+  const [lx, lz] = spoke(-2.4, 0.5);
+  addLeroyCell(lx, lz);
+  const [rx, rz] = spoke(0.9, 0.85);
+  addTrainStop(rx, rz);
+
+  scatterParts(BUILDABLES[0], 9001);
+  scatterParts(BUILDABLES[1], 9007);
+  updateQuestHud();
 }
 
 /*
@@ -2857,7 +3508,7 @@ function renderLoadout() {
   game.slots.forEach((s, i) => {
     const el = document.createElement("div");
     el.className = "slot" + (i === game.weapon ? " active" : "");
-    el.textContent = `${i + 1} ${weaponById(s.id).name}`;
+    el.textContent = `${i + 1} ${weaponFor(s).name}`;
     ui.loadout.appendChild(el);
   });
 }
@@ -3065,7 +3716,7 @@ function collect(d) {
 
   if (d.kind === "maxammo") {
     for (const s of game.slots) {
-      const w = weaponById(s.id);
+      const w = weaponFor(s);
       s.mag = w.mag;
       s.reserve = w.reserve;
     }
@@ -3246,7 +3897,78 @@ function thingInReach() {
   for (const b of barriers) {
     if (!b.bought) consider({ kind: "door", barrier: b }, b.x, b.z, b.y, 3.4);
   }
+  for (const m of packMachines) consider({ kind: "pack", pack: m }, m.x, m.z, m.y, 3.4);
+  for (const t of bankTellers) consider({ kind: "bank", teller: t }, t.x, t.z, t.y, 3.2);
+  for (const w of workbenches) consider({ kind: "bench", bench: w }, w.x, w.z, w.y, 3.2);
+  for (const s of turbineSockets) {
+    if (!s.live) consider({ kind: "socket", socket: s }, s.x, s.z, s.y, 3.2);
+  }
+  if (leroy.cell && !leroy.alive) {
+    consider({ kind: "leroy" }, leroy.cell.x, leroy.cell.z + 1.6, leroy.cell.y, 3.4);
+  }
+  for (const t of trainStops) consider({ kind: "train", stop: t }, t.x, t.z, t.y, 5);
   return best;
+}
+
+/** What the prompt says, and what F does, for everything you can walk up to. */
+function describeThing(t) {
+  if (t.kind === "box") return { cost: BOX_COST, line: `MYSTERY BOX — ${BOX_COST} POINTS` };
+  if (t.kind === "perk") {
+    const p = t.machine.perk;
+    return hasPerk(p.id)
+      ? { cost: 0, owned: true, line: `${p.name.toUpperCase()} — ALREADY YOURS` }
+      : { cost: p.cost, line: `${p.name.toUpperCase()} — ${p.cost} POINTS · ${p.desc}` };
+  }
+  if (t.kind === "door") return { cost: t.barrier.cost, line: `CLEAR THE WAY — ${t.barrier.cost} POINTS` };
+  if (t.kind === "wall") {
+    const held = game.slots.some((s) => s.id === t.wall.weaponId);
+    const cost = held ? Math.round(t.wall.cost * 0.5) : t.wall.cost;
+    return { cost, line: `${t.wall.name.toUpperCase()} — ${cost} POINTS${held ? " · AMMO" : ""}` };
+  }
+  if (t.kind === "pack") {
+    if (!quest.powered) return { cost: 0, owned: true, line: "PACK-A-PUNCH — NO POWER" };
+    const packed = !!curSlot().up;
+    const cost = packed ? PAP_REFILL : PAP_COST;
+    return { cost, line: `PACK-A-PUNCH — ${cost} POINTS${packed ? " · AMMO" : ""}` };
+  }
+  if (t.kind === "bank") {
+    const takingOut = game.points < BANK_STEP;
+    return takingOut
+      ? { cost: 0, line: `WITHDRAW ${Math.min(BANK_STEP, bank.points)} — ${bank.points} BANKED` }
+      : { cost: 0, line: `DEPOSIT ${BANK_STEP} — ${bank.points} BANKED` };
+  }
+  if (t.kind === "bench") {
+    const ready = benchReady();
+    return ready
+      ? { cost: 0, line: `BUILD THE ${ready.name.toUpperCase()}` }
+      : { cost: 0, owned: true, line: `WORKBENCH — ${carriedLine() || "NO PARTS YET"}` };
+  }
+  if (t.kind === "socket") {
+    return built.has("turbine")
+      ? { cost: 0, line: "SET THE TURBINE DOWN" }
+      : { cost: 0, owned: true, line: "TURBINE SOCKET — NOTHING TO PUT IN IT" };
+  }
+  if (t.kind === "leroy") return { cost: LEROY_COST, line: `PAY OFF THE LOCK — ${LEROY_COST} POINTS` };
+  if (t.kind === "train") {
+    const ready = quest.step >= QUEST_STEPS.length - 1;
+    return ready
+      ? { cost: TRAIN_FARE, line: `TAKE THE TRAIN OUT — ${TRAIN_FARE} POINTS` }
+      : { cost: 0, owned: true, line: "THE TRAIN DOES NOT RUN YET" };
+  }
+  return { cost: 0, line: "" };
+}
+
+function actOnThing(t) {
+  if (t.kind === "perk") return buyPerk(t.machine.perk);
+  if (t.kind === "door") return buyBarrier(t.barrier);
+  if (t.kind === "wall") return buyWallGun(t.wall);
+  if (t.kind === "pack") return packCurrentWeapon();
+  if (t.kind === "bank") return useBank(game.points < BANK_STEP);
+  if (t.kind === "bench") return buildAtBench();
+  if (t.kind === "socket") return placeTurbine(t.socket);
+  if (t.kind === "leroy") return freeLeroy();
+  if (t.kind === "train") return boardTrain();
+  return null;
 }
 
 function buyPerk(perk) {
@@ -3284,30 +4006,7 @@ function updateBoxPrompt() {
     return;
   }
 
-  let cost = 0;
-  let line = "";
-  let owned = false;
-
-  if (nearThing.kind === "box") {
-    cost = BOX_COST;
-    line = `MYSTERY BOX — ${cost} POINTS`;
-  } else if (nearThing.kind === "perk") {
-    const p = nearThing.machine.perk;
-    cost = p.cost;
-    owned = hasPerk(p.id);
-    line = owned
-      ? `${p.name.toUpperCase()} — ALREADY YOURS`
-      : `${p.name.toUpperCase()} — ${cost} POINTS · ${p.desc}`;
-  } else if (nearThing.kind === "door") {
-    cost = nearThing.barrier.cost;
-    line = `CLEAR THE WAY — ${cost} POINTS`;
-  } else {
-    const wb = nearThing.wall;
-    const held = game.slots.some((s) => s.id === wb.weaponId);
-    cost = held ? Math.round(wb.cost * 0.5) : wb.cost;
-    line = `${wb.name.toUpperCase()} — ${cost} POINTS${held ? " · AMMO" : ""}`;
-  }
-
+  const { cost, line, owned } = describeThing(nearThing);
   const affordable = game.points >= cost;
   el.classList.remove("hidden");
   el.classList.toggle("poor", !owned && !affordable);
@@ -3319,9 +4018,7 @@ function updateBoxPrompt() {
 
 function useBox() {
   if (!nearThing) return;
-  if (nearThing.kind === "perk") return buyPerk(nearThing.machine.perk);
-  if (nearThing.kind === "door") return buyBarrier(nearThing.barrier);
-  if (nearThing.kind === "wall") return buyWallGun(nearThing.wall);
+  if (nearThing.kind !== "box") return actOnThing(nearThing);
   if (!nearBox) return;
   if (game.points < BOX_COST) {
     sfx.dryFire();
@@ -3392,6 +4089,7 @@ function killZombie(z) {
   // when it is finished off, not every time it falls over.
   if (z.kind === "reviver" && !z.finished) return;
   game.kills++;
+  if (z.questBoss) advanceQuest("boss"); // what came up out of the mine
   maybeDrop(z.group.position);
   curSlot().reserve = Math.min(400, curSlot().reserve + curWeapon().pickup);
   trimCorpses();
@@ -3500,7 +4198,7 @@ function applyPowerPart(part) {
 
   if (effect === "refill") {
     for (const s of game.slots) {
-      const w = weaponById(s.id);
+      const w = weaponFor(s);
       s.mag = w.mag;
       s.reserve = w.reserve;
     }
@@ -4088,9 +4786,8 @@ function animate() {
       // the detailed model costs more to draw, so fewer stand at once
       // corpses lie around for a minute, so only the ones on their feet
       // count against the limit — otherwise a wave stops spawning entirely
-      if (game.spawnTimer <= 0 && liveCount() < MAX_LIVE) {
-        game.spawnTimer =
-          Math.max(0.2, 0.85 - game.wave * 0.04) * game.diff.rate;
+      if (game.spawnTimer <= 0 && liveCount() < liveCap()) {
+        game.spawnTimer = spawnGap();
         spawnZombie(game.wave);
         game.toSpawn--;
         syncHud();
@@ -4145,6 +4842,11 @@ function animate() {
     updateProjectiles(dt);
     updateThrowables(dt);
     updateDrops(dt);
+    if (!game.dm) {
+      updateParts(dt);
+      updateLeroy(dt);
+      if (turbineSockets[0]?.spin) turbineSockets[0].spin.rotation.y += dt * 9;
+    }
     hudAcc += dt;
     if (hudAcc > 0.12) {
       hudAcc = 0;
@@ -4981,6 +5683,7 @@ function toLobby() {
   ui.lobby.classList.remove("hidden");
   $("power-btn").classList.add("hidden");
   renderPanel();
+  updateQuestHud();
 }
 
 // ── start / restart ──────────────────────────────────────────────
@@ -4994,6 +5697,7 @@ function beginPlay() {
   clock.getDelta(); // drop the accumulated idle time
   grabMouse();
   audio();
+  updateQuestHud();
 }
 
 function resetGame() {
@@ -5648,7 +6352,7 @@ function respawnPlayer() {
   player.alive = true;
   player.lastHit = game.time;
   for (const s of game.slots) {
-    const w = weaponById(s.id);
+    const w = weaponFor(s);
     s.mag = w.mag;
     s.reserve = w.reserve;
   }
@@ -6287,6 +6991,27 @@ if (import.meta.env.DEV) {
     ownedPerks,
     barriers,
     wallBuys,
+    packMachines,
+    bankTellers,
+    workbenches,
+    turbineSockets,
+    trainStops,
+    partPickups,
+    carried,
+    builtSet: built,
+    quest,
+    QUEST_STEPS,
+    leroy,
+    bank,
+    packCurrentWeapon,
+    useBank,
+    buildAtBench,
+    placeTurbine,
+    freeLeroy,
+    boardTrain,
+    weaponFor,
+    magnifyOf,
+    liveCap,
     obstacles,
     mysteryBoxes,
     PLAYER_R,

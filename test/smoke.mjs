@@ -109,6 +109,11 @@ await page.evaluate(() => {
 const waveTrace = await page.evaluate(async () => {
   const p = window.__probe;
   const wallStop = Date.now() + 120000;
+  // A wave now trickles in rather than arriving at once, and this browser runs
+  // the clock two hundred times slow, so waiting out a real wave is not on.
+  // Cut the round short: what is being checked is that a cleared wave rolls
+  // over into the next one, not how long a full one takes.
+  p.game.toSpawn = 2;
   while (p.game.wave < 2 && Date.now() < wallStop) {
     for (const z of [...p.zombies]) if (z.dying <= 0 && z.rising <= 0) p.killZombie(z);
     p.player.hp = 100000;
@@ -708,6 +713,123 @@ else {
   if (tokens.used !== 1) note(`revives used came to ${tokens.used}, expected 1`);
 }
 
+/*
+ * The whole quest, start to finish, in order. Every step has to be reachable
+ * and every step has to refuse to be skipped — a chain where one link opens
+ * early is a chain that finishes itself.
+ */
+step("the quest runs end to end and cannot be short-cut");
+const questRun = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "town";
+  p.resetGame();
+  p.beginPlay();
+  const log = [];
+  const at = () => p.quest.step;
+
+  // nothing may be skipped: the train must refuse before the work is done
+  p.game.points = 999999;
+  p.boardTrain();
+  const trainRefusedEarly = !p.quest.won;
+
+  // the Pack-a-Punch must refuse before there is power
+  p.game.slots = [{ id: "ak47", mag: 30, reserve: 90 }];
+  p.game.weapon = 0;
+  p.packCurrentWeapon();
+  const papRefusedUnpowered = !p.game.slots[0].up;
+
+  // 1: collect the turbine parts and build it
+  for (const part of p.partPickups) {
+    if (part.id === "turbine") p.carried.turbine = (p.carried.turbine ?? 0) + 1;
+  }
+  p.buildAtBench();
+  log.push(["turbine built", p.builtSet.has("turbine"), at()]);
+
+  // 2: put it in the socket
+  p.placeTurbine(p.turbineSockets[0]);
+  log.push(["power on", p.quest.powered, at()]);
+
+  // now the Pack-a-Punch works, and doubles what it should
+  const base = p.WEAPONS.find((w) => w.id === "ak47");
+  p.game.points = 999999;
+  p.packCurrentWeapon();
+  const up = p.game.slots[0].up;
+  const packed = up
+    ? { damage: up.damage / base.damage, mag: up.mag / base.mag, reserve: up.reserve / base.reserve, name: up.name }
+    : null;
+
+  // 3: pay off the lock
+  p.game.points = 999999;
+  p.freeLeroy();
+  log.push(["prisoner out", p.leroy.alive, at()]);
+
+  // 4: he takes the vault door off — walk him onto it
+  const vault = p.barriers.find((b) => b.vault);
+  if (vault) {
+    p.leroy.group.position.set(vault.x, 0, vault.z);
+    p.player.pos.set(vault.x, 0, vault.z);
+    for (let i = 0; i < 40 && !p.quest.vaultOpen; i++) await new Promise((r) => setTimeout(r, 150));
+  }
+  log.push(["vault open", p.quest.vaultOpen, at()]);
+
+  // 5: the jet gun
+  for (const part of p.partPickups) {
+    if (part.id === "jetgun") p.carried.jetgun = (p.carried.jetgun ?? 0) + 1;
+  }
+  p.buildAtBench();
+  const holdingJetGun = p.game.slots.some((s) => s.id === "jetgun");
+  log.push(["jet gun built", p.builtSet.has("jetgun"), at()]);
+
+  // 6: whatever came up out of the mine
+  const boss = p.zombies.find((z) => z.questBoss);
+  if (boss) { boss.rising = 0; p.killZombie(boss); }
+  log.push(["boss down", at() >= 6, at()]);
+
+  // 7: and out
+  p.game.points = 999999;
+  p.boardTrain();
+  log.push(["got out", p.quest.won, at()]);
+
+  return { log, trainRefusedEarly, papRefusedUnpowered, packed, holdingJetGun, steps: p.QUEST_STEPS.length };
+});
+
+for (const [what, ok, atStep] of questRun.log) {
+  if (!ok) note(`the quest stalled at "${what}" (step ${atStep} of ${questRun.steps})`);
+}
+if (!questRun.trainRefusedEarly) note("the train let you leave before the quest was done");
+if (!questRun.papRefusedUnpowered) note("the Pack-a-Punch worked with no power");
+if (!questRun.holdingJetGun) note("building the jet gun did not put it in your hands");
+if (!questRun.packed) note("the Pack-a-Punch did not upgrade the gun");
+else {
+  const { damage, mag, reserve, name } = questRun.packed;
+  step(`  packed an AK into "${name}" — ${damage}× damage, ${mag}× magazine, ${reserve}× reserve`);
+  for (const [what, got] of [["damage", damage], ["magazine", mag], ["reserve", reserve]]) {
+    if (Math.abs(got - 2) > 0.01) note(`Pack-a-Punch gave ${got}× ${what}, expected exactly 2×`);
+  }
+}
+
+// ── the bank keeps points between runs ──
+step("the bank holds points across a death");
+const banked = await page.evaluate(() => {
+  const p = window.__probe;
+  p.resetGame();
+  p.beginPlay();
+  p.bank.points = 0;
+  p.game.points = 3000;
+  p.useBank(false); // deposit
+  const afterDeposit = { pocket: p.game.points, bank: p.bank.points };
+  p.resetGame(); // a new run: pocket points are gone, banked ones are not
+  const survived = p.bank.points;
+  p.game.points = 0;
+  p.useBank(true); // withdraw
+  return { afterDeposit, survived, pocket: p.game.points, left: p.bank.points };
+});
+if (banked.afterDeposit.bank !== 1000) note(`depositing put ${banked.afterDeposit.bank} in the bank, expected 1000`);
+if (banked.afterDeposit.pocket !== 2000) note(`depositing left ${banked.afterDeposit.pocket} in hand, expected 2000`);
+if (banked.survived !== 1000) note("the bank did not survive a new run");
+if (banked.pocket !== 1000) note(`withdrawing gave ${banked.pocket}, expected 1000`);
+if (banked.left !== 0) note(`withdrawing left ${banked.left} banked, expected 0`);
+
 // ── aiming down the sights ──
 step("right button aims, and only the right guns have sights");
 const sights = await page.evaluate(async () => {
@@ -751,14 +873,17 @@ const sights = await page.evaluate(async () => {
   p.setAiming(false);
   const backFov = await settleTo(0);
 
-  // a shotgun must not budge however hard the button is held
+  // a shotgun aims too now, but barely — it should not zoom like a rifle
   const sg = p.WEAPONS.find((w) => w.id === "shotgun");
   p.game.slots = [{ id: "shotgun", mag: sg.mag, reserve: sg.reserve }];
   p.setAiming(true);
-  const shotgunFov = await settleTo(0); // it must never leave the hip
+  const shotgunFov = await settleTo(1);
   p.setAiming(false);
+  await settleTo(0);
 
-  return { startPoints, withSights, without, hipFov, aimedFov, backFov, shotgunFov, wasAiming };
+  const magnify = {};
+  for (const w of p.WEAPONS) magnify[w.id] = p.magnifyOf(w);
+  return { startPoints, withSights, without, magnify, hipFov, aimedFov, backFov, shotgunFov, wasAiming };
 });
 
 step(`  ${sights.withSights.length} guns with sights, ${sights.without.length} without`);
@@ -766,12 +891,23 @@ if (sights.startPoints !== 500) note(`a game starts with ${sights.startPoints} p
 if (!(sights.aimedFov < sights.hipFov - 10)) note(`aiming barely moved the view (${sights.hipFov} → ${sights.aimedFov})`);
 if (!sights.wasAiming) note("holding the right button did not count as aiming");
 if (Math.abs(sights.backFov - sights.hipFov) > 0.5) note("the view did not come back after letting go");
-if (Math.abs(sights.shotgunFov - sights.hipFov) > 0.5) note("a shotgun aimed when it should not");
-for (const id of ["pistol", "magnum", "shotgun", "dbarrel", "auto12", "knife"]) {
-  if (sights.withSights.includes(id)) note(`${id} has sights and should not`);
-}
-for (const id of ["ak47", "m4", "scar", "mp5", "vector", "uzi", "sniper", "rpd", "dingo", "mg42", "rpg", "m32", "gl40", "raygun", "raygun2"]) {
+// a rifle at 3× must end up narrower than a shotgun at 1.5×
+if (!(sights.shotgunFov > sights.aimedFov))
+  note(`a shotgun zoomed as far as a rifle (${sights.shotgunFov} vs ${sights.aimedFov})`);
+if (Math.abs(sights.shotgunFov - sights.hipFov / 1.5) > 1)
+  note(`a shotgun settled at ${sights.shotgunFov}°, expected about ${(sights.hipFov / 1.5).toFixed(1)}°`);
+if (sights.withSights.includes("knife")) note("the knife has sights and should not");
+for (const id of ["pistol", "magnum", "shotgun", "dbarrel", "auto12", "ak47", "sniper", "rpg", "raygun2"]) {
   if (!sights.withSights.includes(id)) note(`${id} has no sights and should have`);
+}
+// how far each kind pulls the world in
+for (const [id, want] of [
+  ["pistol", 1.5], ["magnum", 1.5], ["shotgun", 1.5], ["dbarrel", 1.5], ["auto12", 1.5],
+  ["sniper", 6],
+  ["ak47", 3], ["m4", 3], ["mp5", 3], ["rpd", 3], ["raygun2", 3], ["rpg", 3],
+]) {
+  const got = sights.magnify[id];
+  if (got !== want) note(`${id} magnifies ${got}×, expected ${want}×`);
 }
 
 // ── the last-resort panel must stay out of the way when nothing is wrong ──
