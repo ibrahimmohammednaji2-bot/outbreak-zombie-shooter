@@ -1142,6 +1142,90 @@ function mineHead(x, z, seed) {
   return p;
 }
 
+/*
+ * A crack in the street with lava in it. The glowing part is scenery you can
+ * walk over — you have to be able to, or the streets stop being streets — and
+ * standing in it is what hurts. `lavaPools` is what the damage checks read.
+ */
+const lavaPools = []; // whichever map is standing
+function lavaCrack(sink, x, z, w, d, r = 0) {
+  sink.push({ x, z, hw: w / 2, hd: d / 2, cos: Math.cos(-r), sin: Math.sin(-r) });
+  return [
+    { ...box(x, z, w, 0.12, d, 0xff5a1e, r, 0.02), clip: false },
+    { ...box(x, z, w * 0.72, 0.16, d * 0.72, 0xffb04a, r, 0.05), clip: false },
+    // the broken lip of the road either side
+    box(x, z, w + 0.9, 0.34, d + 0.9, 0x2f2a26, r),
+  ];
+}
+
+/** Is this spot standing in lava? */
+function inLava(x, z) {
+  for (const p of lavaPools) {
+    const dx = x - p.x;
+    const dz = z - p.z;
+    const lx = dx * p.cos - dz * p.sin;
+    const lz = dx * p.sin + dz * p.cos;
+    if (Math.abs(lx) < p.hw && Math.abs(lz) < p.hd) return true;
+  }
+  return false;
+}
+
+/*
+ * A barn: a big open timber shed with a hayloft over half of it, a ramp up to
+ * the loft, and both ends open enough to run through.
+ */
+function barn(x, z, seed) {
+  const rnd = rngFrom(seed);
+  const HW = 11;
+  const HD = 15;
+  const H = 6.5;
+  const T = 0.5;
+  const wood = 0x6e3b2a;
+  const LOFT = 3.4;
+  const p = [];
+
+  for (const side of [-1, 1]) {
+    p.push(...ruinWall(x + side * HW, z, "z", HD * 2, H, T, wood, rnd, { gap: 0.16, low: 0.12 }));
+  }
+  // the two ends, each with a big doorway
+  for (const end of [-1, 1]) {
+    const doorW = 5;
+    const run = HW - doorW / 2;
+    for (const side of [-1, 1]) {
+      p.push(...ruinWall(x + side * (doorW / 2 + run / 2), z + end * HD, "x", run, H, T, wood, rnd, { gap: 0.1, low: 0.1 }));
+    }
+    p.push(box(x, z + end * HD, doorW, 1.4, T, wood, 0, H - 1.4));
+  }
+
+  // the hayloft over the back half, and the ramp up to it
+  p.push(box(x, z - HD * 0.45, HW * 2 - 0.6, 0.35, HD * 1.05, 0x8a6a3a, 0, LOFT));
+  for (let i = 0; i < 10; i++) {
+    p.push(box(x + HW - 1.6, z + HD * 0.5 - i * 0.9, 2.6, (LOFT / 10) * (i + 1), 0.95, 0x6b5233));
+  }
+  // bales up top and down below
+  for (let i = 0; i < 5; i++) {
+    p.push(box(x - HW * 0.5 + i * 2.2, z - HD * 0.7, 1.6, 1.1, 1.2, 0xb9973f, rnd() * 0.4, LOFT + 0.35));
+    p.push(box(x - HW * 0.6 + rnd() * 8, z + HD * 0.3 - rnd() * 6, 1.6, 1.1, 1.2, 0xb9973f, rnd() * 3));
+  }
+  // a pitched roof in rafters, nothing to bump your head on
+  for (let i = 0; i < 11; i++) {
+    const o = -HD * 0.9 + i * (HD * 0.18);
+    for (const t of [0.4, -0.4]) {
+      p.push({ ...box(x, z + o, HW * 2.2, 0.24, 0.3, 0x4a3728), y: H + 1, tilt: t, clip: false });
+    }
+  }
+  return p;
+}
+
+/** A grain silo: a tall drum with a cone on top. */
+function silo(x, z) {
+  return [
+    cyl(x, z, 3.4, 3.6, 14, 0x8d8272),
+    { ...cone(x, z, 4, 3.4, 0x6b6d72, 14), clip: false },
+    box(x + 4.2, z, 0.4, 12, 0.4, 0x5a5f66), // the ladder cage
+  ];
+}
+
 /** A run of mine timbering: two posts and a cap, repeated along a line. */
 function timbering(x1, z1, x2, z2, count) {
   const out = [];
@@ -1513,6 +1597,9 @@ const cityBoxes = [];
 const forestMarks = [];
 const cityMarks = [];
 const townBoxes = [];
+const farmBoxes = [];
+const townLava = [];
+const farmMarks = [];
 const townMarks = [];
 
 const MAPS = [
@@ -1589,65 +1676,167 @@ const MAPS = [
     ],
   },
   {
-    id: "city",
-    name: "City",
+    /*
+     * The town, after whatever it was that did this. The ground has split and
+     * there is lava in the cracks: it lights the place, and standing in it
+     * burns, so the streets are a question of where you put your feet. Tight
+     * enough to be caught in, open enough to run rings in.
+     */
+    id: "town",
+    name: "Town",
     blurb:
-      "A bombed-out city. Apartment blocks with their floors caved in, rubble slopes you can climb, and streets full of wrecks.",
-    half: 118,
-    ground: 0x3a3833,
-    sky: 0x121820,
-    fog: 0.0052,
-    light: 1,
-    start: [0, 62],
+      "A burning town split open by lava. The bank, the bar, tight streets, and cracks in the road that will cook you.",
+    half: 96,
+    ground: 0x36302b,
+    sky: 0x1a0d08,
+    fog: 0.0075,
+    light: 0.72,
+    start: [0, 52],
     boxes: cityBoxes,
     marks: cityMarks,
-    fires: [
-      [0, 0], [-40, -40], [40, 40], [-46, 34], [46, -34],
-      [0, -58], [-64, 8], [64, -8], [-20, 62], [24, -66],
-    ],
+    lava: townLava,
+    fires: [[0, 0], [-34, -28], [36, 30], [-40, 34], [40, -32], [0, -54]],
     props: [
-      // apartment ruins, each generated from its own seed
-      ...ruinBlock(-34, -30, 11),
-      ...ruinBlock(31, -35, 23),
-      ...ruinBlock(-30, 33, 37),
-      ...ruinBlock(37, 31, 53),
-      ...ruinBlock(2, -60, 71),
-      ...ruinBlock(-64, 2, 89),
-      ...ruinBlock(63, 7, 101),
-      ...ruinBlock(-6, 58, 113),
-      ...ruinBlock(-66, -56, 127),
-      ...ruinBlock(64, 58, 139),
-      ...ruinBlock(-58, 62, 151),
-      ...ruinBlock(58, -62, 163),
-      // houses filling the blocks between them
-      ...house(-30, 4, 3, cityBoxes, cityMarks),
-      ...house(34, 12, 7, cityBoxes),
-      ...house(-6, -50, 13),
-      ...house(18, 54, 19),
-      ...house(-88, -16, 29),
-      ...house(88, -12, 41),
-      ...house(-36, -92, 59),
-      ...house(44, 92, 67),
-      ...house(-84, 96, 79),
-      ...house(86, -92, 97),
-      // wrecked cars through the streets
-      ...scatter(46, 23, (rnd) => {
+      // the bank: the big building, and the one with a vault under it
+      ...house(-30, 6, 3, cityBoxes, cityMarks),
+      // the bar, and the rest of the street
+      ...house(34, 14, 7),
+      ...house(-8, -48, 13),
+      ...house(22, 52, 19),
+      ...house(-60, -40, 29),
+      ...house(62, -44, 41),
+      ...house(-64, 46, 59),
+      ...house(66, 48, 67),
+      ...house(4, 78, 79),
+      ...house(-30, -78, 97),
+      ...house(38, -78, 103),
+      ...house(-78, 4, 109),
+      ...house(80, 2, 127),
+      // the blocks behind them, floors caved in
+      ...ruinBlock(-46, -12, 11),
+      ...ruinBlock(48, -10, 23),
+      ...ruinBlock(-14, 30, 37),
+      ...ruinBlock(16, -28, 53),
+      ...ruinBlock(-52, 70, 71),
+      ...ruinBlock(54, 72, 89),
+      ...ruinBlock(-2, -70, 101),
+      ...ruinBlock(-82, -66, 113),
+      ...ruinBlock(84, 66, 131),
+
+      // ── the lava: what makes it this town and not any other ──
+      ...lavaCrack(townLava, 0, 26, 26, 5, 0.1).flat(),
+      ...lavaCrack(townLava, -18, -12, 6, 24, 0.2).flat(),
+      ...lavaCrack(townLava, 20, -6, 7, 22, -0.15).flat(),
+      ...lavaCrack(townLava, 0, -34, 30, 6, 0.05).flat(),
+      ...lavaCrack(townLava, -44, 22, 20, 6, 1.1).flat(),
+      ...lavaCrack(townLava, 46, 20, 18, 6, -1).flat(),
+      ...lavaCrack(townLava, -24, 62, 22, 5, 0.4).flat(),
+      ...lavaCrack(townLava, 28, 66, 20, 5, -0.5).flat(),
+      ...lavaCrack(townLava, 0, 90, 34, 6, 0).flat(),
+      ...lavaCrack(townLava, -70, -20, 6, 26, 0.1).flat(),
+      ...lavaCrack(townLava, 72, -22, 6, 24, -0.1).flat(),
+      ...scatter(14, 401, (rnd) => {
         const a = rnd() * Math.PI * 2;
-        const d = 8 + rnd() * 76;
-        return box(Math.cos(a) * d, Math.sin(a) * d, 4.2, 1.4, 1.9, pickR([0x4a3f3a, 0x3f4a48, 0x53433a], rnd), rnd() * 3);
-      }),
-      // barricades, skips and heaped rubble
-      ...scatter(40, 211, (rnd) => {
+        const d = 30 + rnd() * 55;
+        return lavaCrack(townLava, Math.cos(a) * d, Math.sin(a) * d, 4 + rnd() * 5, 4 + rnd() * 5, rnd() * 3);
+      }).flat().flat(),
+
+      // burnt-out cars, barricades, rubble
+      ...scatter(40, 23, (rnd) => {
         const a = rnd() * Math.PI * 2;
-        const d = 12 + rnd() * 72;
-        const s = 1.2 + rnd() * 1.6;
-        return box(Math.cos(a) * d, Math.sin(a) * d, s * 2, s * 0.7, s, 0x6f665b, rnd() * 3);
+        const d = 10 + rnd() * 74;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 4.2, 1.4, 1.9, pickR([0x30292a, 0x2f3634, 0x3a2f28], rnd), rnd() * 3);
       }),
-      ...scatter(30, 307, (rnd) => {
+      ...scatter(44, 211, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 74;
+        const sz = 1.2 + rnd() * 1.6;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 2, sz * 0.7, sz, 0x5f574e, rnd() * 3);
+      }),
+      ...scatter(34, 307, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 16 + rnd() * 70;
-        const s = 1 + rnd() * 0.9;
-        return box(Math.cos(a) * d, Math.sin(a) * d, s, s, s, CRATE, rnd() * 3);
+        const sz = 1 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    /*
+     * Two buildings and a field. The point of it is the room: nothing here is
+     * a corridor, so a crowd behind you stays a crowd behind you as long as
+     * you keep moving. The farmhouse and the barn are where you stop being
+     * able to do that.
+     */
+    id: "farm",
+    name: "Farm",
+    blurb:
+      "A burnt-out farm. A house, a barn with a hayloft, a silo, and a wide open field to run rings in.",
+    half: 78,
+    ground: 0x4a4630,
+    sky: 0x1b1a14,
+    fog: 0.0105,
+    light: 0.62,
+    start: [0, 40],
+    boxes: farmBoxes,
+    marks: farmMarks,
+    fires: [[-26, 22], [30, -18], [0, 8], [-34, -30]],
+    props: [
+      // the farmhouse: two floors, the perks and the box
+      ...house(-26, 20, 211, farmBoxes, farmMarks),
+      // the barn across the yard, and the silo between them
+      ...barn(28, -14, 223),
+      ...silo(2, -2),
+      ...silo(11, -4),
+
+      // fences round the fields, most of them down
+      ...scatter(70, 233, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 52 + rnd() * 18;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        if (rnd() > 0.72) return [];
+        return [
+          box(x, z, 2.4, 1.25, 0.14, 0x5b4a38, a + Math.PI / 2),
+          box(x, z, 0.2, 1.5, 0.2, 0x4a3728),
+        ];
+      }).flat(),
+
+      // a tractor, a trailer, troughs, and things left where they stopped
+      ...scatter(10, 241, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 18 + rnd() * 34;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        const r = rnd() * 3;
+        return [
+          box(x, z, 4.4, 1.8, 2.2, pickR([0x4a5a32, 0x6b3a2a, 0x3f4a48], rnd), r),
+          { ...cyl(x + 1.8, z + 1.2, 1.2, 1.2, 0.5, 0x2a2622, 0.1), clip: false },
+          { ...cyl(x - 1.8, z - 1.2, 1.2, 1.2, 0.5, 0x2a2622, 0.1), clip: false },
+        ];
+      }).flat(),
+      ...scatter(16, 251, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 22 + rnd() * 36;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 3.2, 0.8, 1.1, 0x6b5233, rnd() * 3);
+      }),
+      // hay bales scattered over the field, low enough to vault
+      ...scatter(34, 263, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 50;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 1.7, 1.15, 1.3, 0xb9973f, rnd() * 3);
+      }),
+      // burnt stumps and dead hedgerow at the edges
+      ...scatter(30, 271, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 44 + rnd() * 30;
+        return deadTree(Math.cos(a) * d, Math.sin(a) * d, 0.7 + rnd() * 0.6, rnd);
+      }).flat(),
+      ...scatter(50, 281, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 16 + rnd() * 56;
+        const sz = 0.4 + rnd() * 0.6;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, 0.26, sz * 0.8, 0x4a4034, rnd() * 3);
       }),
     ],
   },
@@ -1659,7 +1848,7 @@ const MAPS = [
      * whole thing, which is why there is no sky and no horizon — just haze and
      * the next building along.
      */
-    id: "town",
+    id: "buried",
     name: "Buried Town",
     blurb:
       "A Western mining town that the ground swallowed. One street, a church, a graveyard, and the mine it was built for.",
@@ -1819,7 +2008,9 @@ function clearMap() {
 }
 
 function buildMap(def) {
-  lightsUsed = 0; // a fresh map gets the whole light budget back
+  lightsUsed = 0;
+  lavaPools.length = 0;
+  for (const p of def.lava ?? []) lavaPools.push(p); // a fresh map gets the whole light budget back
   clearMap();
   mapDef = def;
   HALF = def.half;
@@ -6647,6 +6838,17 @@ function updateThrowables(dt) {
   }
   if (player.slow > 0) player.slow -= dt;
 
+  /*
+   * Standing in a crack. It burns while you are in it and stops the moment
+   * you are out, which is what makes the streets a question of where you put
+   * your feet rather than a wall you cannot cross.
+   */
+  if (player.alive && player.pos.y < 1.2 && lavaPools.length && inLava(player.pos.x, player.pos.z)) {
+    hurtPlayer(22 * dt, "the lava");
+    ui.vignette.style.opacity = "0.5";
+    player.lastHit = game.time;
+  }
+
   // Mending: health coming back a little at a time rather than all at once
   if (powerActive("regen") && player.hp > 0) {
     player.hp = Math.min(player.maxHp, player.hp + powerAmount("regen") * dt);
@@ -7016,6 +7218,8 @@ if (import.meta.env.DEV) {
     liveCap,
     scene,
     LIGHT_BUDGET,
+    lavaPools,
+    inLava,
     obstacles,
     mysteryBoxes,
     PLAYER_R,

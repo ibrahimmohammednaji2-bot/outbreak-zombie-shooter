@@ -495,13 +495,13 @@ for (const b of maps) note(`map failed to build — ${b}`);
 
 // ── the buried town has to be playable, not just buildable ──
 step("the buried town works like the other maps");
-const town = await page.evaluate(() => {
+const buriedTown = await page.evaluate(() => {
   const p = window.__probe;
-  p.game.mapId = "town";
+  p.game.mapId = "buried";
   p.resetGame();
-  const start = p.MAPS.find((m) => m.id === "town").start;
+  const start = p.MAPS.find((m) => m.id === "buried").start;
   return {
-    exists: !!p.MAPS.find((m) => m.id === "town"),
+    exists: !!p.MAPS.find((m) => m.id === "buried"),
     machines: p.perkMachines.length,
     boxes: p.mysteryBoxes.length,
     doors: p.barriers.length,
@@ -511,14 +511,14 @@ const town = await page.evaluate(() => {
     startClear: Math.hypot(p.player.pos.x - start[0], p.player.pos.z - start[1]) < 3,
   };
 });
-step(`  ${town.props} solid props, ${town.machines} machines, ${town.boxes} box, ${town.doors} doors`);
-if (!town.exists) note("the buried town is not in the map list");
-if (town.machines !== 4) note(`the town has ${town.machines} perk machines, expected 4`);
-if (!town.boxes) note("the town has no mystery box");
-if (town.doors < 3) note(`the town has ${town.doors} paid doors, expected at least 3`);
-if (!town.wallGuns) note("the town has no gun on a wall");
-if (!town.startClear) note("you start the town shoved out of position, so the spawn is inside something");
-if (town.props < 400) note(`the town only has ${town.props} solid props — it will feel empty`);
+step(`  ${buriedTown.props} solid props, ${buriedTown.machines} machines, ${buriedTown.boxes} box, ${buriedTown.doors} doors`);
+if (!buriedTown.exists) note("the buried town is not in the map list");
+if (buriedTown.machines !== 4) note(`the town has ${buriedTown.machines} perk machines, expected 4`);
+if (!buriedTown.boxes) note("the town has no mystery box");
+if (buriedTown.doors < 3) note(`the town has ${buriedTown.doors} paid doors, expected at least 3`);
+if (!buriedTown.wallGuns) note("the town has no gun on a wall");
+if (!buriedTown.startClear) note("you start the town shoved out of position, so the spawn is inside something");
+if (buriedTown.props < 400) note(`the town only has ${buriedTown.props} solid props — it will feel empty`);
 
 // ── every weapon has to be holdable and fireable ──
 step("every weapon fires");
@@ -721,7 +721,7 @@ else {
 step("the machines all work, and the Pack-a-Punch still needs power")
 const works = await page.evaluate(async () => {
   const p = window.__probe;
-  p.game.mapId = "town";
+  p.game.mapId = "buried";
   p.resetGame();
   p.beginPlay();
 
@@ -924,6 +924,51 @@ for (const [id, n] of Object.entries(lights.out)) {
   // the budget, plus the muzzle flash, plus a little room
   if (n > lights.budget + 3) note(`${id} has ${n} dynamic lights, over the budget of ${lights.budget}`);
 }
+
+// ── the two new maps, and the lava that defines one of them ──
+step("Town burns you and Farm is open")
+const newMaps = await page.evaluate(async () => {
+  const p = window.__probe;
+  const out = {};
+
+  p.game.mapId = "town";
+  p.resetGame();
+  p.beginPlay();
+  out.townProps = p.obstacles.length;
+  out.cracks = p.lavaPools.length;
+
+  // stand in one and see the health go
+  const crack = p.lavaPools[0];
+  p.player.pos.set(crack.x, 0, crack.z);
+  p.player.hp = 100;
+  p.player.maxHp = 100;
+  const before = p.player.hp;
+  for (let i = 0; i < 30 && p.player.hp === before; i++) await new Promise((r) => setTimeout(r, 120));
+  out.burned = p.player.hp < before;
+
+  // and step out of it
+  p.player.pos.set(crack.x + crack.hw + 6, 0, crack.z + crack.hd + 6);
+  p.player.hp = 100;
+  const outside = p.player.hp;
+  for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 120));
+  out.safeOutside = p.player.hp >= outside;
+
+  p.game.mapId = "farm";
+  p.resetGame();
+  out.farmProps = p.obstacles.length;
+  out.farmLava = p.lavaPools.length;
+  out.farmMachines = p.perkMachines.length;
+  out.farmBoxes = p.mysteryBoxes.length;
+  return out;
+});
+step(`  town ${newMaps.townProps} props and ${newMaps.cracks} lava cracks, farm ${newMaps.farmProps} props`);
+if (!newMaps.cracks) note("Town has no lava");
+if (!newMaps.burned) note("standing in lava did not hurt");
+if (!newMaps.safeOutside) note("lava kept burning after stepping out of it");
+if (newMaps.farmLava) note("Farm has lava and should not");
+if (newMaps.farmMachines !== 4) note(`Farm has ${newMaps.farmMachines} perk machines, expected 4`);
+if (!newMaps.farmBoxes) note("Farm has no mystery box");
+if (newMaps.farmProps < 300) note(`Farm only has ${newMaps.farmProps} props — it will feel bare`);
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")
