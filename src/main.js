@@ -1151,8 +1151,9 @@ const lavaPools = []; // whichever map is standing
 function lavaCrack(sink, x, z, w, d, r = 0) {
   sink.push({ x, z, hw: w / 2, hd: d / 2, cos: Math.cos(-r), sin: Math.sin(-r) });
   return [
-    { ...box(x, z, w, 0.12, d, 0xff5a1e, r, 0.02), clip: false },
-    { ...box(x, z, w * 0.72, 0.16, d * 0.72, 0xffb04a, r, 0.05), clip: false },
+    // red, with a hotter red down the middle of it
+    { ...box(x, z, w, 0.12, d, 0xc41111, r, 0.02), clip: false },
+    { ...box(x, z, w * 0.72, 0.16, d * 0.72, 0xff2a18, r, 0.05), clip: false },
     // the broken lip of the road either side
     box(x, z, w + 0.9, 0.34, d + 0.9, 0x2f2a26, r),
   ];
