@@ -970,6 +970,53 @@ if (newMaps.farmMachines !== 4) note(`Farm has ${newMaps.farmMachines} perk mach
 if (!newMaps.farmBoxes) note("Farm has no mystery box");
 if (newMaps.farmProps < 300) note(`Farm only has ${newMaps.farmProps} props — it will feel bare`);
 
+// ── TranZit, and the bus that drives it ──
+step("the bus drives the route and carries you")
+const busRun = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "tranzit";
+  p.resetGame();
+  p.beginPlay();
+
+  const map = p.MAPS.find((m) => m.id === "tranzit");
+  const out = { stops: map.route.length, props: p.obstacles.length };
+
+  // it has to actually move
+  const startedAt = { x: p.bus.x, z: p.bus.z };
+  const wallStop = Date.now() + 120000;
+  while (Math.hypot(p.bus.x - startedAt.x, p.bus.z - startedAt.z) < 4 && Date.now() < wallStop) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  out.moved = Math.round(Math.hypot(p.bus.x - startedAt.x, p.bus.z - startedAt.z));
+
+  /*
+   * And it has to take you with it. Standing on the deck, the distance from
+   * you to the bus must stay the same while the bus covers ground — if it
+   * changes, the bus drove out from under you.
+   */
+  p.player.pos.set(p.bus.x, p.BUS.FLOOR, p.bus.z);
+  p.player.alive = true;
+  await new Promise((r) => setTimeout(r, 400));
+  const gapBefore = Math.hypot(p.player.pos.x - p.bus.x, p.player.pos.z - p.bus.z);
+  const busFrom = { x: p.bus.x, z: p.bus.z };
+  await new Promise((r) => setTimeout(r, 2500));
+  out.busTravelled = Math.round(Math.hypot(p.bus.x - busFrom.x, p.bus.z - busFrom.z));
+  out.gapDrift = Math.round(
+    Math.abs(Math.hypot(p.player.pos.x - p.bus.x, p.player.pos.z - p.bus.z) - gapBefore),
+  );
+
+  // and the deck holds you up
+  out.deck = p.busCollide(p.player.pos, 0.42)?.floor ?? 0;
+  return out;
+});
+step(`  ${busRun.stops} stops, ${busRun.props} props, bus moved ${busRun.moved} units`);
+if (busRun.stops !== 5) note(`TranZit has ${busRun.stops} stops, expected 5`);
+if (busRun.props < 600) note(`TranZit only has ${busRun.props} props for a map that size`);
+if (busRun.moved < 4) note("the bus never moved");
+if (busRun.busTravelled > 2 && busRun.gapDrift > 2)
+  note(`the bus drove ${busRun.busTravelled} units out from under you (drift ${busRun.gapDrift})`);
+if (Math.abs(busRun.deck - 1.05) > 0.01) note(`the bus deck is at ${busRun.deck}, expected 1.05`);
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

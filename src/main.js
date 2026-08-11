@@ -1602,6 +1602,22 @@ const cityMarks = [];
 const townBoxes = [];
 const farmBoxes = [];
 const townLava = [];
+const transitBoxes = [];
+const transitMarks = [];
+const transitLava = [];
+
+/*
+ * The bus route: the five stops, in the order the bus visits them. The road
+ * is drawn along these and the bus drives between them, so moving a stop moves
+ * both and they cannot drift apart.
+ */
+const ROUTE = [
+  [0, 148], // the depot
+  [-112, 44], // the diner
+  [-26, -112], // the farm
+  [112, 40], // the power station
+  [0, 4], // the town
+];
 const farmMarks = [];
 const townMarks = [];
 
@@ -1967,6 +1983,128 @@ const MAPS = [
       }),
     ],
   },
+  {
+    /*
+     * The whole route on one map: five places, a road that joins them, and a
+     * bus that drives it. Everything is a long way from everything else, which
+     * is the point — the distance is what the bus is for, and walking it is
+     * the choice you make when you have missed it.
+     */
+    id: "tranzit",
+    name: "TranZit",
+    blurb:
+      "Five places on one road: the depot, the diner, the farm, the power station and the town. A bus drives the route. Ride it or walk.",
+    half: 190,
+    ground: 0x3f3d33,
+    sky: 0x14140f,
+    fog: 0.006,
+    light: 0.6,
+    start: [0, 150],
+    boxes: transitBoxes,
+    marks: transitMarks,
+    lava: transitLava,
+    route: ROUTE,
+    fires: [[0, 140], [-118, 34], [8, -12], [122, 40], [0, -140]],
+    props: [
+      /* ── the depot, where you start ───────────────────────────── */
+      ...storefront(0, 152, 22, 16, 601, Math.PI),
+      ...storefront(-20, 138, 12, 10, 607, Math.PI / 2),
+      ...scatter(8, 613, (rnd) => {
+        const x = -22 + rnd() * 44;
+        return box(x, 128 + rnd() * 10, 4.6, 1.5, 2, 0x3a4a48, rnd() * 3);
+      }),
+
+      /* ── the diner, off to the west ───────────────────────────── */
+      ...storefront(-118, 40, 20, 14, 619, -Math.PI / 2),
+      ...house(-140, 22, 623),
+      // the pumps and the canopy over them
+      ...scatter(4, 629, (rnd) => {
+        const x = -104 + rnd() * 8;
+        const z = 26 + rnd() * 14;
+        return [box(x, z, 1, 1.6, 1.4, 0xb8b0a2), box(x, z, 0.4, 0.5, 0.4, 0xd64545, 0, 1.6)];
+      }).flat(),
+      { ...box(-100, 33, 16, 0.5, 12, 0x8d8272), y: 4.4, clip: false },
+      ...scatter(4, 631, (rnd) => box(-108 + rnd() * 16, 27 + rnd() * 12, 0.4, 4.4, 0.4, 0x8d8272)),
+
+      /* ── the farm: the house, the barn, the silos ─────────────── */
+      ...house(-30, -110, 211, transitBoxes, transitMarks),
+      ...barn(20, -128, 223),
+      ...silo(-2, -96),
+      ...silo(7, -98),
+      ...scatter(40, 641, (rnd) => {
+        const x = -60 + rnd() * 110;
+        const z = -150 + rnd() * 70;
+        return box(x, z, 1.7, 1.15, 1.3, 0xb9973f, rnd() * 3);
+      }),
+
+      /* ── the power station, east ──────────────────────────────── */
+      ...ruinBlock(122, 46, 647),
+      ...ruinBlock(140, 30, 653),
+      ...storefront(108, 34, 16, 13, 659, -Math.PI / 2),
+      // transformers and the pylons walking away from them
+      ...scatter(9, 661, (rnd) => {
+        const x = 100 + rnd() * 48;
+        const z = 16 + rnd() * 44;
+        return [box(x, z, 3, 3.4, 3, 0x5a5f66, rnd()), box(x, z, 0.3, 1.6, 0.3, 0x8d8272, 0, 3.4)];
+      }).flat(),
+      ...scatter(7, 673, (rnd) => {
+        const z = -10 + rnd() * 100;
+        const x = 150 + rnd() * 26;
+        return [
+          box(x, z, 0.5, 16, 0.5, 0x6b6d72),
+          { ...box(x, z, 7, 0.4, 0.5, 0x6b6d72), y: 14, clip: false },
+        ];
+      }).flat(),
+
+      /* ── the town, south, and the cracks through it ───────────── */
+      ...house(-24, -8, 3, transitBoxes, transitMarks),
+      ...house(26, -20, 7),
+      ...house(-6, 26, 13),
+      ...ruinBlock(-46, 10, 677),
+      ...ruinBlock(44, 12, 683),
+      ...lavaCrack(transitLava, 0, 6, 24, 5, 0.1).flat(),
+      ...lavaCrack(transitLava, -18, -22, 6, 20, 0.2).flat(),
+      ...lavaCrack(transitLava, 22, 4, 6, 18, -0.15).flat(),
+      ...lavaCrack(transitLava, 0, -38, 26, 5, 0).flat(),
+
+      /* ── the road that joins the five, and what lines it ──────── */
+      ...ROUTE.flatMap(([rx, rz], i) => {
+        const next = ROUTE[(i + 1) % ROUTE.length];
+        const out = [];
+        // kerb stones down both sides of each leg, thinly
+        for (let k = 0; k <= 14; k++) {
+          const t = k / 14;
+          const x = rx + (next[0] - rx) * t;
+          const z = rz + (next[1] - rz) * t;
+          const a = Math.atan2(next[1] - rz, next[0] - rx) + Math.PI / 2;
+          for (const side of [-1, 1]) {
+            out.push(
+              box(x + Math.cos(a) * side * 7, z + Math.sin(a) * side * 7, 1.6, 0.3, 1.6, 0x55524a, a),
+            );
+          }
+        }
+        return out;
+      }),
+      // wrecks and rubble out in the country between the stops
+      ...scatter(60, 691, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 60 + rnd() * 110;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 4.2, 1.4, 1.9, pickR([0x30292a, 0x2f3634, 0x3a2f28], rnd), rnd() * 3);
+      }),
+      // dead hedgerow and stumps, which is most of what is out there
+      ...scatter(90, 701, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 46 + rnd() * 130;
+        return deadTree(Math.cos(a) * d, Math.sin(a) * d, 0.7 + rnd() * 0.8, rnd);
+      }).flat(),
+      ...scatter(70, 709, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 40 + rnd() * 140;
+        const sz = 0.5 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, 0.28, sz * 0.8, pickOf(ROCK, rnd), rnd() * 3);
+      }),
+    ],
+  },
 ];
 
 const mapById = (id) => MAPS.find((m) => m.id === id) ?? MAPS[0];
@@ -2194,6 +2332,7 @@ function buildMap(def) {
   }
 
   placePerkMachines();
+  buildBus();
   buildGrid(); // everything is placed — index it for fast lookups
 }
 
@@ -3321,6 +3460,171 @@ function updateLeroy(dt) {
     }
     break;
   }
+}
+
+/* ── the bus ─────────────────────────────────────────────────── */
+
+/*
+ * The bus drives the route on its own and carries whatever is standing on it.
+ *
+ * This is the only thing in the game that moves and can be stood on, and the
+ * collision system was built for things that hold still. Rather than make the
+ * obstacle grid handle a moving box — which would mean rebuilding the grid
+ * every frame — the bus is kept out of it entirely and handled here: if you
+ * are within its floor and at its height, you are carried, and the walls are
+ * four ordinary boxes that move with it and are tested by hand.
+ */
+const BUS = {
+  W: 3.4, // half width
+  D: 7.5, // half length
+  FLOOR: 1.05,
+  H: 3.2,
+  SPEED: 13,
+  WAIT: 6, // seconds at each stop
+};
+
+const bus = { group: null, x: 0, z: 0, leg: 0, t: 0, wait: 0, riding: false };
+
+function buildBus() {
+  if (bus.group) {
+    scene.remove(bus.group);
+    bus.group = null;
+  }
+  if (!mapDef?.route) return;
+
+  const g = new THREE.Group();
+  const body = new THREE.MeshLambertMaterial({ color: 0xc9a227 });
+  const glass = new THREE.MeshLambertMaterial({ color: 0x2a3a44, emissive: 0x0e1a20 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x2a2622 });
+
+  const panel = (w, h, d, x, y, z, m = body) => {
+    const mesh = new THREE.Mesh(UNIT_BOX, m);
+    mesh.scale.set(w, h, d);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    g.add(mesh);
+    return mesh;
+  };
+
+  panel(BUS.W * 2, 0.3, BUS.D * 2, 0, BUS.FLOOR, 0); // the deck you stand on
+  panel(0.25, BUS.H, BUS.D * 2, -BUS.W, BUS.FLOOR + BUS.H / 2, 0); // sides
+  panel(0.25, BUS.H, BUS.D * 2, BUS.W, BUS.FLOOR + BUS.H / 2, 0);
+  panel(BUS.W * 2, BUS.H, 0.25, 0, BUS.FLOOR + BUS.H / 2, -BUS.D); // back
+  panel(BUS.W * 2, 1.2, 0.25, 0, BUS.FLOOR + BUS.H - 0.6, BUS.D); // front, open below
+  panel(BUS.W * 2 - 0.4, 0.25, BUS.D * 2 - 0.4, 0, BUS.FLOOR + BUS.H, 0); // roof
+  panel(BUS.W * 1.7, 1.1, 0.2, 0, BUS.FLOOR + 1.9, BUS.D - 0.1, glass); // windscreen
+  for (const side of [-1, 1]) {
+    for (const along of [-4.5, -1.5, 1.5, 4.5]) {
+      panel(0.18, 1, 2.4, side * BUS.W, BUS.FLOOR + 1.9, along, glass);
+    }
+    for (const along of [-5, 4.5]) {
+      const w = new THREE.Mesh(UNIT_CYL, dark);
+      w.scale.set(1.1, 0.5, 1.1);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(side * BUS.W, 0.8, along);
+      g.add(w);
+    }
+  }
+
+  scene.add(g);
+  bus.group = g;
+  bus.leg = 0;
+  bus.t = 0;
+  bus.wait = BUS.WAIT;
+  const [sx, sz] = mapDef.route[0];
+  bus.x = sx;
+  bus.z = sz;
+  g.position.set(sx, 0, sz);
+}
+
+/** Where the bus is going, and how far along it is. */
+function updateBus(dt) {
+  if (!bus.group || !mapDef?.route) return;
+  const route = mapDef.route;
+
+  const from = route[bus.leg];
+  const to = route[(bus.leg + 1) % route.length];
+  const legLen = Math.hypot(to[0] - from[0], to[1] - from[1]);
+
+  const wasX = bus.x;
+  const wasZ = bus.z;
+
+  /*
+   * Who is aboard is decided against where the bus is *now*, before it moves.
+   * Asking afterwards means testing the passenger against a bus that has
+   * already driven off, and they fall off the back a fraction at a time.
+   */
+  const local = busLocal(player.pos.x, player.pos.z);
+  const aboard =
+    player.alive &&
+    Math.abs(local.x) < BUS.W &&
+    Math.abs(local.z) < BUS.D &&
+    player.pos.y >= BUS.FLOOR - 0.4 &&
+    player.pos.y < BUS.FLOOR + BUS.H;
+
+  if (bus.wait > 0) {
+    bus.wait -= dt;
+  } else {
+    bus.t += (BUS.SPEED * dt) / legLen;
+    if (bus.t >= 1) {
+      bus.t = 0;
+      bus.leg = (bus.leg + 1) % route.length;
+      bus.wait = BUS.WAIT;
+    }
+  }
+
+  bus.x = from[0] + (to[0] - from[0]) * bus.t;
+  bus.z = from[1] + (to[1] - from[1]) * bus.t;
+  bus.group.position.set(bus.x, 0, bus.z);
+  bus.group.rotation.y = Math.atan2(to[0] - from[0], to[1] - from[1]);
+
+  if (aboard) {
+    // carried: the deck moves under you and you go with it
+    player.pos.x += bus.x - wasX;
+    player.pos.z += bus.z - wasZ;
+    if (player.pos.y < BUS.FLOOR) player.pos.y = BUS.FLOOR;
+    if (!bus.riding) {
+      bus.riding = true;
+      toast("ON THE BUS");
+    }
+  } else if (bus.riding) {
+    bus.riding = false;
+  }
+}
+
+/*
+ * Your position in the bus's own frame.
+ *
+ * Three.js turns local +X to world (cos θ, −sin θ), so going the other way is
+ * a rotation by θ and not by −θ. Negating it here reads as obviously right and
+ * is wrong, in the same way it was wrong on the booth walls: at right angles
+ * the two agree, and on a diagonal the deck ends up ninety degrees from where
+ * the bus is. Four of the five legs of this route are diagonal.
+ */
+function busLocal(x, z) {
+  const dx = x - bus.x;
+  const dz = z - bus.z;
+  const a = bus.group?.rotation.y ?? 0;
+  return {
+    x: dx * Math.cos(a) - dz * Math.sin(a),
+    z: dx * Math.sin(a) + dz * Math.cos(a),
+  };
+}
+
+/*
+ * The bus as something solid, tested by hand because it moves. The deck holds
+ * you up, the sides and the back stop you walking out, and the front is open
+ * so you can get on.
+ */
+function busCollide(pos, radius) {
+  if (!bus.group) return null;
+  const l = busLocal(pos.x, pos.z);
+  const inside = Math.abs(l.x) < BUS.W + radius && Math.abs(l.z) < BUS.D + radius;
+  if (!inside) return null;
+
+  // below the deck: the whole thing is a wall
+  if (pos.y < BUS.FLOOR - 0.4) return { floor: 0, blocked: true };
+  return { floor: BUS.FLOOR, blocked: false };
 }
 
 const spotScratch = new THREE.Vector3();
@@ -4571,7 +4875,16 @@ function movePlayer(dt) {
   // only things taller than the feet block you — the rest you land on
   pushOut(player.pos, PLAYER_R, player.pos.y);
 
-  const floorY = groundHeightAt(player.pos, PLAYER_R, player.pos.y);
+  /*
+   * The bus deck, which the obstacle grid knows nothing about because it
+   * moves. Whichever is higher — the ground or the deck — is what you are
+   * standing on.
+   */
+  const onBus = busCollide(player.pos, PLAYER_R);
+  const floorY = Math.max(
+    groundHeightAt(player.pos, PLAYER_R, player.pos.y),
+    onBus && !onBus.blocked ? onBus.floor : 0,
+  );
   if (player.pos.y <= floorY) {
     player.pos.y = floorY;
     player.vy = 0;
@@ -5048,6 +5361,7 @@ function animate() {
     updateThrowables(dt);
     updateDrops(dt);
     if (!game.dm) {
+      updateBus(dt);
       updateParts(dt);
       updateLeroy(dt);
       if (turbineSockets[0]?.spin) turbineSockets[0].spin.rotation.y += dt * 9;
@@ -7244,6 +7558,9 @@ if (import.meta.env.DEV) {
     scene,
     LIGHT_BUDGET,
     lavaPools,
+    bus,
+    BUS,
+    busCollide,
     inLava,
     obstacles,
     mysteryBoxes,
