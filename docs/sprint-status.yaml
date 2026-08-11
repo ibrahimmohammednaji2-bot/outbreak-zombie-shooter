@@ -1,0 +1,104 @@
+# Sprint plan
+#
+# One developer. A "sprint" here is a week of evenings, not a week of full
+# days — planning against forty hours nobody has is how a plan stops being
+# used by the second week.
+#
+# status: todo | doing | done | blocked
+
+project: Zombie Attack
+owner: Ibrahim Mohammed
+capacity_per_sprint: 12h
+updated: 2026-08-11
+
+# What is already true before sprint 1, so nobody re-plans it
+shipped:
+  - The game: 4 maps, 22 weapons, 8 zombie types, 4 perks, Pack-a-Punch, bank
+  - 140 skins across 7 rarities, each with its own power
+  - Coins, tokens, revives, a daily reward and a daily rotating offer
+  - Local profiles and progress in the browser
+  - Free-for-all against bots
+  - A browser smoke test that plays the real game and gates every change
+  - Deployed on GitHub Pages, updating on push
+
+blocked_on_founder:
+  - id: F1
+    what: A registered business entity
+    blocks: [E4]
+    why: No payment provider pays out to an individual without one
+  - id: F2
+    what: Vercel and Supabase accounts
+    blocks: [E1.5, E2.1]
+    why: Cannot be created on someone's behalf
+  - id: F3
+    what: A domain, and an address for support mail
+    blocks: [E3.6]
+    why: A contact form needs somewhere for the mail to come from
+
+sprints:
+  - n: 1
+    goal: The game is served by a Next.js app on Vercel, and nothing about it got worse
+    stories:
+      - {id: E1.1, title: Next.js 16 app in web/, size: M, status: todo}
+      - {id: E1.2, title: Game builds into public/game and runs at /play, size: M, status: todo}
+      - {id: E1.3, title: Design tokens, dark and light, size: S, status: todo}
+      - {id: E1.4, title: Header, footer, 404, size: S, status: todo}
+      - {id: E1.5, title: Deploy to Vercel, size: S, status: blocked, on: F2}
+    demo: Open the Vercel URL, click Play, and the game plays as it does today
+
+  - n: 2
+    goal: A player can have an account and not lose their run
+    stories:
+      - {id: E2.1, title: Supabase project, profiles, RLS, size: M, status: blocked, on: F2}
+      - {id: E2.2, title: Sign up, size: M, status: todo}
+      - {id: E2.3, title: Sign in and out, size: S, status: todo}
+      - {id: E2.4, title: Forgot password, size: M, status: todo}
+      - {id: E2.5, title: Protected routes, size: S, status: todo}
+    demo: Sign up, sign out, forget the password, get back in
+
+  - n: 3
+    goal: The five pages the project has to have
+    stories:
+      - {id: E3.1, title: Landing, size: M, status: todo}
+      - {id: E3.2, title: Home, size: M, status: todo}
+      - {id: E3.3, title: Account, size: M, status: todo}
+      - {id: E3.4, title: Settings, size: S, status: todo}
+      - {id: E3.5, title: Security, size: M, status: todo}
+    demo: Every required page exists and does something real
+
+  - n: 4
+    goal: Support works, and progress survives signing in
+    stories:
+      - {id: E3.6, title: FAQs and a contact form that sends mail, size: M, status: blocked, on: F3}
+      - {id: E2.6, title: Merge local progress into the account, size: M, status: todo}
+      - {id: E5.1, title: Server-side funnel events, size: M, status: todo}
+    demo: Submit the form and the mail arrives; sign in and keep the coins
+
+  - n: 5
+    goal: Somebody who is not us plays it
+    stories:
+      - {id: E6.1, title: Portal build, size: S, status: todo}
+      - {id: E6.2, title: Submit to CrazyGames and Poki, size: S, status: todo}
+      - {id: E6.3, title: Trailer and screenshots, size: M, status: todo}
+      - {id: E5.2, title: Funnel dashboard, size: M, status: todo}
+    demo: A submission is in, and we can see what the first arrivals did
+
+  - n: 6+
+    goal: Take money
+    stories:
+      - {id: E4.1, title: Entitlements table, server writes only, size: M, status: blocked, on: F1}
+      - {id: E4.2, title: Checkout, size: L, status: blocked, on: F1}
+      - {id: E4.3, title: Verified webhook grants entitlements, size: M, status: blocked, on: F1}
+      - {id: E4.4, title: Receipts and history, size: M, status: blocked, on: F1}
+      - {id: E4.5, title: Restore on a new device, size: S, status: blocked, on: F1}
+    demo: A real purchase, on a real card, that survives signing in elsewhere
+
+# Read this before adding anything
+notes:
+  - Sprint 5 is the earliest revenue and needs none of sprint 6. If time runs
+    short, do 1 and 5.
+  - Sprint 6 is blocked on paperwork, not on code. Starting the code early does
+    not unblock it.
+  - Every change ships behind the browser smoke test. A green suite is not the
+    same as a working game — twice now, running it by hand found what the suite
+    missed — so the game gets opened and played before anything is called done.

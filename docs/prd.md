@@ -144,3 +144,52 @@ Grouped by capability. IDs are stable and globally numbered.
   audience large enough to need it?
 - Owner is likely under 18 *[ASSUMPTION]*, which blocks payment processing in
   their own name and gates all of §5.4's paid work.
+
+---
+
+# Part 2 — The application around the game
+
+Added 2026-08-11. Part 1 describes the game, which ships. This part describes
+the web application it will be served from, none of which exists yet.
+
+## Why there is a Part 2
+
+The game is finished enough to be a product and cannot be a business, because
+progress lives in a browser's local storage and nothing can be bought. Both are
+the same missing piece: a server with accounts on it.
+
+## Platform requirements
+
+| | Requirement | Notes |
+| --- | --- | --- |
+| **FR27** | Sign up with email and password, with confirmation | Supabase Auth |
+| **FR28** | Sign in and sign out, session surviving a reload | |
+| **FR29** | Recover a forgotten password by email | Identical response whether or not the address is known |
+| **FR30** | A landing page that works signed out and leads with the game running | The primary action is Play, never Sign up |
+| **FR31** | A Home page showing coins, equipped skin, last run and the daily reward | Real numbers in the first paint |
+| **FR32** | Account: email, display name, change password, delete account | Deletion removes progress and entitlements and says so first |
+| **FR33** | Settings: language, theme, reduced motion | Arabic and English, with RTL |
+| **FR34** | Security: active sessions, sign out everywhere, last sign-in | |
+| **FR35** | Support: FAQs and a contact form that sends real mail | With a reference number shown on the page |
+| **FR36** | Progress persists to the account and merges with local on first sign-in | Neither side lost; higher of each kept |
+| **FR37** | Entitlements are granted only by a verified payment webhook | The client may never assert ownership |
+| **FR38** | Server-side funnel events | No third-party pixel, no consent banner |
+
+## Non-functional
+
+- **Load.** The landing page is interactive in under 2s on a mid-range tablet
+  over 4G. The game bundle loads only on `/play`.
+- **Accessibility.** Everything outside the game canvas is operable by
+  keyboard, meets 4.5:1 on body text, and works at 200% zoom. See DESIGN.md.
+- **Privacy.** No third-party tracking. Support mail and account data are the
+  only personal data held.
+- **Cost.** Must run on the free tiers of Vercel and Supabase until there are
+  players, and the architecture must not assume otherwise.
+
+## Explicitly out of scope for now
+
+- Real-player multiplayer. Free-for-all stays against bots until there is an
+  audience worth building an authoritative server for.
+- A native app. The entire proposition is that there is nothing to install.
+- Taking money. Blocked on a registered entity, not on code — see
+  sprint-status.yaml.
