@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/*
+ * The tokens from docs/DESIGN.md. The site wraps a game that is dark, warm-lit
+ * and slightly grimy, and it has to feel like the same object — so dark by
+ * default, one warm accent, and type that gets out of the way.
+ */
+:root {
+  --bg: #0a0d0b;
+  --surface: #121a15;
+  --surface-lift: #18231c;
+  --line: rgba(255, 255, 255, 0.1);
+  --ink: #e8efe6;
+  --ink-dim: #93a599;
+  --accent: #5fd77a;
+  --accent-ink: #06170c;
+  --warn: #ffc94a;
+  --danger: #ff6b6b;
+}
+
+/*
+ * Light mode is not an afterthought: a parent or a portal reviewer may well
+ * open this on a bright screen. Same tokens, inverted surfaces, same accent.
+ */
+:root[data-theme="light"] {
+  --bg: #f4f6f3;
+  --surface: #ffffff;
+  --surface-lift: #eef2ec;
+  --line: rgba(0, 0, 0, 0.12);
+  --ink: #16201a;
+  --ink-dim: #55665c;
+  --accent: #1f7a3a;
+  --accent-ink: #ffffff;
+  --warn: #8a6200;
+  --danger: #b3261e;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6f3;
+    --surface: #ffffff;
+    --surface-lift: #eef2ec;
+    --line: rgba(0, 0, 0, 0.12);
+    --ink: #16201a;
+    --ink-dim: #55665c;
+    --accent: #1f7a3a;
+    --accent-ink: #ffffff;
+    --warn: #8a6200;
+    --danger: #b3261e;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-lift: var(--surface-lift);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-dim: var(--ink-dim);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  /* no web font: a font file is a render-blocking request on a page whose
+     whole promise is that it opens fast */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+/* How a keyboard user knows where they are. Not decoration. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Everything animated drops out entirely when it is not wanted. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skip link: first tab stop on every page, invisible until it is focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
+}

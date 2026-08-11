@@ -10,3 +10,10 @@ tunnel.log
 server/data.json
 dist-portal
 *.zip
+
+# the game is built into the Next app at build time, not committed twice
+web/public/game/
+
+# the Next app builds its own
+web/.next/
+web/node_modules/

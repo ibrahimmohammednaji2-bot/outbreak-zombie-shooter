@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:portal": "PORTAL=1 vite build --outDir dist-portal"
+    "build:portal": "PORTAL=1 vite build --outDir dist-portal",
+    "build:web": "PORTAL=1 vite build --outDir web/public/game --emptyOutDir"
   },
   "keywords": [],
   "author": "",
