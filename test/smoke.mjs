@@ -996,25 +996,40 @@ const busRun = await page.evaluate(async () => {
    */
   p.player.pos.set(p.bus.x, p.BUS.FLOOR, p.bus.z);
   p.player.alive = true;
-  await new Promise((r) => setTimeout(r, 400));
-  const gapBefore = Math.hypot(p.player.pos.x - p.bus.x, p.player.pos.z - p.bus.z);
+  p.player.hp = 100000;
+  p.player.maxHp = 100000;
+  await new Promise((r) => setTimeout(r, 600));
+
+  /*
+   * Ride it properly: a long run, past buildings and round the corners at the
+   * stops, checking every sample. A two-second ride on a straight leg proved
+   * nothing — being pushed off by scenery only happens next to scenery.
+   */
   const busFrom = { x: p.bus.x, z: p.bus.z };
-  await new Promise((r) => setTimeout(r, 2500));
+  let worst = 0;
+  const wall2 = Date.now() + 180000;
+  while (Date.now() < wall2) {
+    const gap = Math.hypot(p.player.pos.x - p.bus.x, p.player.pos.z - p.bus.z);
+    worst = Math.max(worst, gap);
+    if (!p.bus.riding && gap > 12) break; // thrown off for good
+    await new Promise((r) => setTimeout(r, 150));
+  }
   out.busTravelled = Math.round(Math.hypot(p.bus.x - busFrom.x, p.bus.z - busFrom.z));
-  out.gapDrift = Math.round(
-    Math.abs(Math.hypot(p.player.pos.x - p.bus.x, p.player.pos.z - p.bus.z) - gapBefore),
-  );
+  out.gapDrift = Math.round(worst);
+  out.stillAboard = p.bus.riding;
 
   // and the deck holds you up
   out.deck = p.busCollide(p.player.pos, 0.42)?.floor ?? 0;
   return out;
 });
-step(`  ${busRun.stops} stops, ${busRun.props} props, bus moved ${busRun.moved} units`);
+step(`  ${busRun.stops} stops, ${busRun.props} props; rode ${busRun.busTravelled} units, worst drift ${busRun.gapDrift}`);
 if (busRun.stops !== 5) note(`TranZit has ${busRun.stops} stops, expected 5`);
 if (busRun.props < 600) note(`TranZit only has ${busRun.props} props for a map that size`);
 if (busRun.moved < 4) note("the bus never moved");
-if (busRun.busTravelled > 2 && busRun.gapDrift > 2)
-  note(`the bus drove ${busRun.busTravelled} units out from under you (drift ${busRun.gapDrift})`);
+if (busRun.busTravelled > 2 && busRun.gapDrift > 8)
+  note(`you drifted ${busRun.gapDrift} units from the bus over ${busRun.busTravelled} units of route`);
+if (busRun.busTravelled > 20 && !busRun.stillAboard)
+  note("you were left behind partway along the route");
 if (Math.abs(busRun.deck - 1.05) > 0.01) note(`the bus deck is at ${busRun.deck}, expected 1.05`);
 
 // ── the minimap ──

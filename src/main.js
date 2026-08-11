@@ -825,10 +825,10 @@ addEventListener("resize", () => {
 // Each level scales four independent things, so "hard" is not just
 // "more health" — they hit harder, arrive sooner and move quicker.
 const DIFFICULTIES = [
-  { id: "easy", label: "EASY", blurb: "Fewer, slower, softer.", damage: 0.6, count: 0.7, speed: 0.85, health: 0.75, rate: 1.3 },
-  { id: "normal", label: "NORMAL", blurb: "The intended fight.", damage: 1, count: 1, speed: 1, health: 1, rate: 1 },
-  { id: "hard", label: "HARD", blurb: "Harder hits, bigger waves.", damage: 1.5, count: 1.35, speed: 1.15, health: 1.45, rate: 0.78 },
-  { id: "insane", label: "INSANE", blurb: "You will die.", damage: 2.2, count: 1.8, speed: 1.38, health: 2.1, rate: 0.55 },
+  { id: "easy", label: "EASY", blurb: "Fewer, slower, softer.", damage: 0.6, count: 0.7, speed: 0.85, health: 0.75, rate: 1.3, coins: 5 },
+  { id: "normal", label: "NORMAL", blurb: "The intended fight.", damage: 1, count: 1, speed: 1, health: 1, rate: 1, coins: 10 },
+  { id: "hard", label: "HARD", blurb: "Harder hits, bigger waves.", damage: 1.5, count: 1.35, speed: 1.15, health: 1.45, rate: 0.78, coins: 15 },
+  { id: "insane", label: "INSANE", blurb: "You will die.", damage: 2.2, count: 1.8, speed: 1.38, health: 2.1, rate: 0.55, coins: 25 },
 ];
 
 // ── maps ─────────────────────────────────────────────────────────
@@ -1991,7 +1991,7 @@ const MAPS = [
      * the choice you make when you have missed it.
      */
     id: "tranzit",
-    name: "TranZit",
+    name: "Bus",
     blurb:
       "Five places on one road: the depot, the diner, the farm, the power station and the town. A bus drives the route. Ride it or walk.",
     half: 190,
@@ -3483,7 +3483,7 @@ const BUS = {
   WAIT: 6, // seconds at each stop
 };
 
-const bus = { group: null, x: 0, z: 0, leg: 0, t: 0, wait: 0, riding: false };
+const bus = { group: null, x: 0, z: 0, leg: 0, t: 0, wait: 0, riding: false, seat: null };
 
 function buildBus() {
   if (bus.group) {
@@ -3548,6 +3548,7 @@ function updateBus(dt) {
 
   const wasX = bus.x;
   const wasZ = bus.z;
+  const wasRot = bus.group.rotation.y;
 
   /*
    * Who is aboard is decided against where the bus is *now*, before it moves.
@@ -3555,11 +3556,17 @@ function updateBus(dt) {
    * already driven off, and they fall off the back a fraction at a time.
    */
   const local = busLocal(player.pos.x, player.pos.z);
+  /*
+   * Getting on is strict and staying on is forgiving. With one threshold, a
+   * passenger hovering on the boundary flickers aboard and adrift frame by
+   * frame and is left behind a little at a time.
+   */
+  const slack = bus.riding ? 1.1 : 0;
   const aboard =
     player.alive &&
-    Math.abs(local.x) < BUS.W &&
-    Math.abs(local.z) < BUS.D &&
-    player.pos.y >= BUS.FLOOR - 0.4 &&
+    Math.abs(local.x) < BUS.W + slack &&
+    Math.abs(local.z) < BUS.D + slack &&
+    player.pos.y >= BUS.FLOOR - 0.5 &&
     player.pos.y < BUS.FLOOR + BUS.H;
 
   if (bus.wait > 0) {
@@ -3579,16 +3586,40 @@ function updateBus(dt) {
   bus.group.rotation.y = Math.atan2(to[0] - from[0], to[1] - from[1]);
 
   if (aboard) {
-    // carried: the deck moves under you and you go with it
-    player.pos.x += bus.x - wasX;
-    player.pos.z += bus.z - wasZ;
+    /*
+     * Carried. Translating is only half of it: at every stop the bus turns to
+     * face the next leg, and a passenger who is moved but not turned stays
+     * where they were in the world while the deck swings out from under them.
+     * Standing anywhere but dead centre, that walks you off the side at the
+     * first corner — which is what "it leaves you behind" was.
+     */
+    const dRot = bus.group.rotation.y - wasRot;
+    if (dRot) yaw -= dRot; // you turn with the bus, so the view does not swing
+
+    /*
+     * Put you back where you were standing.
+     *
+     * Adding the bus's movement to your position each frame looks right and
+     * loses ground steadily: anything that touches your position between one
+     * frame's carry and the next is a slip that never comes back, and over a
+     * leg you slide off the back. Holding the spot in the bus's own frame and
+     * rebuilding your world position from it cannot drift, because there is
+     * nothing being accumulated.
+     */
+    const seat = bus.seat ?? busLocal(player.pos.x, player.pos.z);
+    const w = busWorld(seat);
+    player.pos.x = w.x;
+    player.pos.z = w.z;
     if (player.pos.y < BUS.FLOOR) player.pos.y = BUS.FLOOR;
     if (!bus.riding) {
       bus.riding = true;
       toast("ON THE BUS");
     }
+    busPushOut(player.pos, PLAYER_R);
   } else if (bus.riding) {
     bus.riding = false;
+    bus.seat = null;
+    toast("OFF THE BUS");
   }
 }
 
@@ -3601,6 +3632,14 @@ function updateBus(dt) {
  * the two agree, and on a diagonal the deck ends up ninety degrees from where
  * the bus is. Four of the five legs of this route are diagonal.
  */
+function busWorld(l) {
+  const a = bus.group?.rotation.y ?? 0;
+  return {
+    x: bus.x + l.x * Math.cos(a) + l.z * Math.sin(a),
+    z: bus.z + -l.x * Math.sin(a) + l.z * Math.cos(a),
+  };
+}
+
 function busLocal(x, z) {
   const dx = x - bus.x;
   const dz = z - bus.z;
@@ -3612,19 +3651,48 @@ function busLocal(x, z) {
 }
 
 /*
- * The bus as something solid, tested by hand because it moves. The deck holds
- * you up, the sides and the back stop you walking out, and the front is open
- * so you can get on.
+ * The bus as something solid, tested by hand because it moves.
+ *
+ * The deck holds you up, the sides and the back are walls you cannot walk
+ * through, and the front is open so you can get on. Below deck height the
+ * whole shape is solid, so you cannot walk under it either.
  */
 function busCollide(pos, radius) {
   if (!bus.group) return null;
   const l = busLocal(pos.x, pos.z);
-  const inside = Math.abs(l.x) < BUS.W + radius && Math.abs(l.z) < BUS.D + radius;
-  if (!inside) return null;
+  if (Math.abs(l.x) > BUS.W + radius || Math.abs(l.z) > BUS.D + radius) return null;
+  if (pos.y < BUS.FLOOR - 0.4) return { floor: 0, solid: true };
+  return { floor: BUS.FLOOR, solid: false };
+}
 
-  // below the deck: the whole thing is a wall
-  if (pos.y < BUS.FLOOR - 0.4) return { floor: 0, blocked: true };
-  return { floor: BUS.FLOOR, blocked: false };
+/*
+ * Push you back inside the bus if you have walked into one of its walls. Done
+ * in the bus's own frame, where the walls are axis-aligned, then rotated back
+ * out — the same trick the static obstacle test uses, except the box moves.
+ */
+function busPushOut(pos, radius) {
+  if (!bus.group) return;
+  if (pos.y < BUS.FLOOR - 0.4 || pos.y > BUS.FLOOR + BUS.H) return;
+
+  const l = busLocal(pos.x, pos.z);
+  const wallX = BUS.W - radius;
+  const backZ = -(BUS.D - radius);
+
+  // only for someone already aboard: it must never shove a passer-by
+  if (Math.abs(l.x) > BUS.W || l.z < -BUS.D || l.z > BUS.D) return;
+
+  let dx = 0;
+  let dz = 0;
+  if (l.x > wallX) dx = wallX - l.x;
+  else if (l.x < -wallX) dx = -wallX - l.x;
+  if (l.z < backZ) dz = backZ - l.z;
+
+  if (!dx && !dz) return;
+
+  // back into world space
+  const a = bus.group.rotation.y;
+  pos.x += dx * Math.cos(a) + dz * Math.sin(a);
+  pos.z += -dx * Math.sin(a) + dz * Math.cos(a);
 }
 
 const spotScratch = new THREE.Vector3();
@@ -3783,9 +3851,15 @@ function placeTownWorks() {
   const [w2x, w2z] = spoke(3.6, 0.55);
   addWorkbench(w2x, w2z);
 
-  // the cell, and the way out at the far end of the map
-  const [lx, lz] = spoke(-2.4, 0.5);
-  addLeroyCell(lx, lz);
+  /*
+   * The prisoner belongs to the buried town and nowhere else. He is the story
+   * of that place — a man locked up under a town that went down with him —
+   * and putting him on the farm and along the bus route made him set dressing.
+   */
+  if (game.mapId === "buried") {
+    const [lx, lz] = spoke(-2.4, 0.5);
+    addLeroyCell(lx, lz);
+  }
 
   for (const [i, def] of BUILDABLES.entries()) scatterParts(def, 9001 + i * 137);
 }
@@ -4689,7 +4763,16 @@ function drawMinimap() {
   }
   if (leroy.alive) dot(leroy.x, leroy.z, "#6fd3ff", 4);
 
-  // and you, pointing the way you are looking
+  /*
+   * And you, pointing the way you are looking. The dial is fixed, so this is
+   * the only thing that turns — the previous version stopped the map spinning
+   * but left the arrow stuck pointing up, which made it look like you were
+   * always facing north.
+   */
+  ctx.save();
+  ctx.translate(R, R);
+  ctx.rotate(facing);
+  ctx.translate(-R, -R);
   ctx.fillStyle = "#e8efe6";
   ctx.beginPath();
   ctx.moveTo(R, R - 6);
@@ -4697,6 +4780,7 @@ function drawMinimap() {
   ctx.lineTo(R + 4.5, R + 5);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
 }
 
 /** Everything a power does the moment it is pressed. */
@@ -4874,6 +4958,17 @@ function movePlayer(dt) {
 
   // only things taller than the feet block you — the rest you land on
   pushOut(player.pos, PLAYER_R, player.pos.y);
+  /*
+   * ...and then the bus puts you back. Driving past a building, the static
+   * push-out was shoving passengers sideways through the bus wall and off the
+   * deck, which is the "it leaves you behind between the houses" case: you
+   * were not left behind, you were pushed out of it.
+   */
+  if (bus.riding) {
+    busPushOut(player.pos, PLAYER_R);
+    // wherever you have walked to on the deck is where you are standing now
+    bus.seat = busLocal(player.pos.x, player.pos.z);
+  }
 
   /*
    * The bus deck, which the obstacle grid knows nothing about because it
@@ -5316,9 +5411,11 @@ function animate() {
         sfx.waveClear();
         banner(`WAVE ${game.wave} CLEARED`, 2600);
         player.hp = Math.min(player.maxHp, player.hp + 25);
-        earnCoins(COINS_PER_WAVE); // paid for surviving it
+        // paid for surviving it, and paid more for surviving a worse one
+        const paid = game.diff.coins ?? COINS_PER_WAVE;
+        earnCoins(paid);
         refillEquipment();
-        toast(`+25 HP · +${COINS_PER_WAVE} COINS`);
+        toast(`+25 HP · +${paid} COINS`);
         syncHud();
       } else {
         game.intermission -= dt;
@@ -5773,7 +5870,7 @@ function renderSkinDetail() {
              cannot be bought yet — the price is what they would cost.</div>`
         : !have && !affordable
           ? `<div class="det-note">You need ${r.cost - wallet.coins} more coins.
-             You earn ${COINS_PER_WAVE} for every wave you survive.</div>`
+             You earn 5 to 25 coins a wave, depending on the difficulty.</div>`
           : ""
     }
 
