@@ -547,7 +547,8 @@ const BOX_POOL = [
   "magnum", "magnum", "sniper", "sniper",
   "rpd", "dingo", "mg42",
   "rpg", "m32", "gl40", "raygun",
-  "raygun2",
+  // one entry each: the box is the only way to either of these now
+  "raygun2", "jetgun",
 ];
 
 /** Two pistols and a knife — the same three every run starts with. */
@@ -2841,7 +2842,6 @@ function buyWallGun(wb) {
  */
 const BUILDABLES = [
   { id: "turbine", name: "Turbine", parts: 3, blurb: "Powers the Pack-a-Punch" },
-  { id: "jetgun", name: "Jet Gun", parts: 4, blurb: "A wall of moving air" },
 ];
 const buildableById = (id) => BUILDABLES.find((b) => b.id === id);
 
@@ -2864,7 +2864,7 @@ const QUEST_STEPS = [
   { id: "power", text: "Carry the turbine to the Pack-a-Punch and switch it on" },
   { id: "leroy", text: "Pay out the prisoner in the gunsmith — he owes nobody anything" },
   { id: "vault", text: "Walk him to the bank vault and let him take the door off" },
-  { id: "jetgun", text: "Find four jet gun parts and build it" },
+  { id: "jetgun", text: "Take the Jet Gun out of the mystery box" },
   { id: "boss", text: "Put down whatever comes up out of the mine" },
   { id: "train", text: "Get to the mine head and take the train out" },
 ];
@@ -2998,22 +2998,8 @@ function buildAtBench() {
   built.add(def.id);
   sfx.unlock();
   banner(`${def.name.toUpperCase()} BUILT`, 2000);
-
-  if (def.id === "jetgun") {
-    const w = weaponById("jetgun");
-    const target = curWeapon().melee ? 0 : game.weapon;
-    viewmodels[game.slots[target].id].visible = false;
-    game.slots[target] = { id: "jetgun", mag: w.mag, reserve: w.reserve };
-    game.weapon = target;
-    viewmodels.jetgun.visible = true;
-    game.reloadTimer = 0;
-    renderLoadout();
-    syncHud();
-    advanceQuest("jetgun");
-  } else {
-    toast(def.blurb.toUpperCase());
-    advanceQuest("turbine");
-  }
+  toast(def.blurb.toUpperCase());
+  advanceQuest(def.id);
   updateQuestHud();
 }
 
@@ -3069,13 +3055,18 @@ function addLeroyCell(x, z, y = 0) {
   bars.position.set(x, y + 1.5, z + 1.6);
   mapGroup.add(bars);
 
-  const him = buildZombie("bigdude");
+  /*
+   * He is a man, not one of them — the same build the deathmatch operators
+   * use, at twice the size and in prison colours. Half of why he reads as an
+   * ally rather than a threat is that he does not walk like the dead.
+   */
+  const him = buildBot(0xb5651d);
   him.group.scale.setScalar(2);
   him.group.position.set(x, y, z);
   scene.add(him.group);
-  for (const m of him.mats) m.color.offsetHSL(0, -0.3, 0.05);
 
   leroy.cell = { x, z, y, bars, group: him.group, model: him };
+  leroy.model = him;
   leroy.alive = false;
   obstacles.push({ x, z: z + 1.6, hw: 1.7, hd: 0.2, bottom: y, top: y + 3, cos: 1, sin: 0 });
 }
@@ -3122,6 +3113,13 @@ function updateLeroy(dt) {
   }
   g.rotation.y = Math.atan2(dx, dz);
   g.position.y = leroy.y + Math.abs(Math.sin(game.time * 4)) * 0.09;
+
+  // a man's stride, not a shamble — legs only swing while he is actually going
+  if (leroy.model) {
+    const swing = d > 4 ? Math.sin(game.time * 6) * 0.6 : 0;
+    leroy.model.legL.rotation.x = swing;
+    leroy.model.legR.rotation.x = -swing;
+  }
   leroy.x = g.position.x;
   leroy.z = g.position.z;
 
@@ -3245,11 +3243,23 @@ function clearNear(x, z, radius = 1.5, reach = 5) {
   return [x, z]; // nowhere better; at least it is where it was asked for
 }
 
-/** Somewhere clear along a spoke out from the middle. */
-function clearSpot(angle, from = HALF * 0.5) {
-  for (let r = from; r > 6; r -= 2.5) {
+/*
+ * Somewhere clear along a spoke out from the middle. It walks inwards looking
+ * for room, but never past `min` — without that floor, a crowded spoke drags
+ * something meant to be out in the trees back to the middle of the map.
+ */
+function clearSpot(angle, from = HALF * 0.5, min = 6) {
+  for (let r = from; r > min; r -= 2.5) {
     const x = Math.cos(angle) * r;
     const z = Math.sin(angle) * r;
+    if (spotIsClear(x, z, 1.6)) return [x, z];
+  }
+  // nothing clear on this spoke — sweep round at the minimum instead
+  for (let i = 1; i < 24; i++) {
+    const a = angle + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.26;
+    const r = Math.max(min, from * 0.8);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
     if (spotIsClear(x, z, 1.6)) return [x, z];
   }
   return [Math.cos(angle) * from, Math.sin(angle) * from];
@@ -3324,13 +3334,13 @@ function placePerkMachines() {
   // ── Juggernaut, in one of the four corners, behind a thousand points ──
   const corner = (Math.random() * 4) | 0;
   const ca = Math.PI / 4 + (corner * Math.PI) / 2;
-  const [jx, jz] = clearSpot(ca, HALF * 0.78);
+  const [jx, jz] = clearSpot(ca, HALF * 0.78, HALF * 0.55); // a corner, and it stays one
   addPerkMachine(perk("jugg"), jx, jz);
   booth(jx, jz, 0, 1000, 4.2, ca + Math.PI); // the way in faces the middle
 
   // ── Stamin-Up, loose in the woods ──
   const sa = Math.random() * Math.PI * 2;
-  const [sx, sz] = clearSpot(sa, HALF * 0.62);
+  const [sx, sz] = clearSpot(sa, HALF * 0.62, HALF * 0.4); // out in the trees, not by the house
   addPerkMachine(perk("stamin"), sx, sz);
 
   placeTownWorks();
@@ -3369,8 +3379,7 @@ function placeTownWorks() {
   const [rx, rz] = spoke(0.9, 0.85);
   addTrainStop(rx, rz);
 
-  scatterParts(BUILDABLES[0], 9001);
-  scatterParts(BUILDABLES[1], 9007);
+  for (const [i, def] of BUILDABLES.entries()) scatterParts(def, 9001 + i * 137);
   updateQuestHud();
 }
 
@@ -4029,6 +4038,11 @@ function useBox() {
   }
 
   game.points -= BOX_COST;
+  grantFromBox();
+}
+
+/** What the box actually hands over, separated so it can be exercised alone. */
+function grantFromBox() {
   const id = BOX_POOL[(Math.random() * BOX_POOL.length) | 0];
   const w = weaponById(id);
 
@@ -4045,6 +4059,11 @@ function useBox() {
   toast(`${w.name.toUpperCase()}`);
   renderLoadout();
   syncHud();
+  // the jet gun comes out of the box now rather than off a workbench
+  if (id === "jetgun") {
+    banner("JET GUN", 2000);
+    advanceQuest("jetgun");
+  }
 }
 
 /*
@@ -7010,6 +7029,7 @@ if (import.meta.env.DEV) {
     leroy,
     bank,
     packCurrentWeapon,
+    useBoxDirect: grantFromBox,
     useBank,
     buildAtBench,
     placeTurbine,

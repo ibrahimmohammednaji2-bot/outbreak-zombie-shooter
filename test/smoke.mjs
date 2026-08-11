@@ -772,13 +772,17 @@ const questRun = await page.evaluate(async () => {
   }
   log.push(["vault open", p.quest.vaultOpen, at()]);
 
-  // 5: the jet gun
-  for (const part of p.partPickups) {
-    if (part.id === "jetgun") p.carried.jetgun = (p.carried.jetgun ?? 0) + 1;
+  // 5: the jet gun, out of the box — keep buying until it comes up
+  p.game.points = 999999;
+  const box = p.mysteryBoxes[0];
+  if (box) p.player.pos.set(box.x, box.y, box.z);
+  let holdingJetGun = false;
+  for (let i = 0; i < 400 && !holdingJetGun; i++) {
+    p.game.points = 999999;
+    p.useBoxDirect();
+    holdingJetGun = p.game.slots.some((s) => s.id === "jetgun");
   }
-  p.buildAtBench();
-  const holdingJetGun = p.game.slots.some((s) => s.id === "jetgun");
-  log.push(["jet gun built", p.builtSet.has("jetgun"), at()]);
+  log.push(["jet gun out of the box", holdingJetGun, at()]);
 
   // 6: whatever came up out of the mine
   const boss = p.zombies.find((z) => z.questBoss);
