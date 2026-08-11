@@ -1585,31 +1585,3 @@ button.ghost:hover {
   opacity: 0.25;
   transform: scale(0.35);
 }
-
-/* the quest line: what to do next, and what you are carrying towards it */
-#quest {
-  position: absolute;
-  left: 34px;
-  top: 96px;
-  max-width: 340px;
-  padding: 9px 13px;
-  border-left: 3px solid #5fd77a;
-  background: rgba(6, 14, 9, 0.66);
-  font-size: 12px;
-  line-height: 1.5;
-  letter-spacing: 0.4px;
-  color: #cfe6d4;
-}
-#quest b {
-  display: inline-block;
-  margin-right: 8px;
-  color: #5fd77a;
-  letter-spacing: 2px;
-}
-#quest .carry {
-  display: block;
-  margin-top: 5px;
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  color: #ffc94a;
-}

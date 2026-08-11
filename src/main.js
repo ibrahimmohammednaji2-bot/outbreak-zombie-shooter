@@ -2852,59 +2852,8 @@ const workbenches = [];
 const turbineSockets = [];
 const trainStops = [];
 
-const quest = { step: 0, powered: false, leroyFree: false, vaultOpen: false, won: false };
-
-/*
- * The quest, in order. Each line is one thing to do and the words shown while
- * it is the thing to do. Nothing here is hidden — a quest you cannot see the
- * shape of is a quest nobody finishes.
- */
-const QUEST_STEPS = [
-  { id: "turbine", text: "Find three turbine parts and build it at a workbench" },
-  { id: "power", text: "Carry the turbine to the Pack-a-Punch and switch it on" },
-  { id: "leroy", text: "Pay out the prisoner in the gunsmith — he owes nobody anything" },
-  { id: "vault", text: "Walk him to the bank vault and let him take the door off" },
-  { id: "jetgun", text: "Take the Jet Gun out of the mystery box" },
-  { id: "boss", text: "Put down whatever comes up out of the mine" },
-  { id: "train", text: "Get to the mine head and take the train out" },
-];
-const questStep = () => QUEST_STEPS[quest.step] ?? null;
-
-function advanceQuest(id) {
-  if (questStep()?.id !== id) return;
-  quest.step++;
-  sfx.waveClear();
-  const next = questStep();
-  banner(next ? "STEP DONE" : "THE WAY OUT IS OPEN", 2200);
-  if (next) toast(next.text.toUpperCase());
-
-  // whatever the mine has been holding comes up when the jet gun is finished
-  if (next?.id === "boss") sendUpTheBoss();
-  updateQuestHud();
-}
-
-function sendUpTheBoss() {
-  const z = spawnZombie(Math.max(8, game.wave));
-  z.kind = "bigdude";
-  z.questBoss = true;
-  z.hp = z.maxHp = z.maxHp * 3;
-  z.group.scale.setScalar(2.4);
-  z.radius = 1.1;
-  banner("SOMETHING CAME UP", 2400);
-}
-
-function updateQuestHud() {
-  const el = $("quest");
-  if (!el) return;
-  const s = questStep();
-  const show = game.running && !game.over && !game.dm && s;
-  el.classList.toggle("hidden", !show);
-  if (show) {
-    el.innerHTML =
-      `<b>${quest.step + 1}/${QUEST_STEPS.length}</b>${s.text}` +
-      (carriedLine() ? `<span class="carry">${carriedLine()}</span>` : "");
-  }
-}
+// what has been switched on and opened this run
+const quest = { powered: false, vaultOpen: false, won: false };
 
 function carriedLine() {
   const bits = [];
@@ -2956,7 +2905,6 @@ function updateParts(dt) {
     const def = buildableById(p.id);
     sfx.unlock();
     toast(`${def.name.toUpperCase()} PART ${carried[p.id]}/${def.parts}`);
-    updateQuestHud();
   }
 }
 
@@ -2999,8 +2947,6 @@ function buildAtBench() {
   sfx.unlock();
   banner(`${def.name.toUpperCase()} BUILT`, 2000);
   toast(def.blurb.toUpperCase());
-  advanceQuest(def.id);
-  updateQuestHud();
 }
 
 function addTurbineSocket(x, z, y = 0) {
@@ -3037,7 +2983,6 @@ function placeTurbine(socket) {
   sfx.unlock();
   banner("POWER ON", 2200);
   toast("THE PACK-A-PUNCH IS LIVE");
-  advanceQuest("power");
 }
 
 /*
@@ -3093,7 +3038,6 @@ function freeLeroy() {
   sfx.unlock();
   banner("HE IS OUT", 2200);
   toast("HE FOLLOWS YOU NOW");
-  advanceQuest("leroy");
   syncHud();
 }
 
@@ -3151,7 +3095,6 @@ function updateLeroy(dt) {
     toast("HE TOOK THE BOARDS OFF");
     if (b.vault) {
       quest.vaultOpen = true;
-      advanceQuest("vault");
     }
     break;
   }
@@ -3180,11 +3123,6 @@ function addTrainStop(x, z, y = 0) {
 }
 
 function boardTrain() {
-  if (quest.step < QUEST_STEPS.length - 1) {
-    sfx.dryFire();
-    toast(`NOT YET — ${questStep()?.text.toUpperCase() ?? ""}`);
-    return;
-  }
   if (game.points < TRAIN_FARE) {
     sfx.dryFire();
     toast(`THE FARE IS ${TRAIN_FARE} — ${TRAIN_FARE - game.points} SHORT`);
@@ -3192,7 +3130,6 @@ function boardTrain() {
   }
   game.points -= TRAIN_FARE;
   quest.won = true;
-  advanceQuest("train");
   winRun();
 }
 
@@ -3304,7 +3241,7 @@ function placePerkMachines() {
   partPickups.length = 0;
   built.clear();
   for (const k of Object.keys(carried)) delete carried[k];
-  Object.assign(quest, { step: 0, powered: false, leroyFree: false, vaultOpen: false, won: false });
+  Object.assign(quest, { powered: false, vaultOpen: false, won: false });
   leroy.alive = false;
   leroy.cell = null;
   leroy.group = null;
@@ -3380,7 +3317,6 @@ function placeTownWorks() {
   addTrainStop(rx, rz);
 
   for (const [i, def] of BUILDABLES.entries()) scatterParts(def, 9001 + i * 137);
-  updateQuestHud();
 }
 
 /*
@@ -3959,12 +3895,7 @@ function describeThing(t) {
       : { cost: 0, owned: true, line: "TURBINE SOCKET — NOTHING TO PUT IN IT" };
   }
   if (t.kind === "leroy") return { cost: LEROY_COST, line: `PAY OFF THE LOCK — ${LEROY_COST} POINTS` };
-  if (t.kind === "train") {
-    const ready = quest.step >= QUEST_STEPS.length - 1;
-    return ready
-      ? { cost: TRAIN_FARE, line: `TAKE THE TRAIN OUT — ${TRAIN_FARE} POINTS` }
-      : { cost: 0, owned: true, line: "THE TRAIN DOES NOT RUN YET" };
-  }
+  if (t.kind === "train") return { cost: TRAIN_FARE, line: `TAKE THE TRAIN OUT — ${TRAIN_FARE} POINTS` };
   return { cost: 0, line: "" };
 }
 
@@ -4062,7 +3993,6 @@ function grantFromBox() {
   // the jet gun comes out of the box now rather than off a workbench
   if (id === "jetgun") {
     banner("JET GUN", 2000);
-    advanceQuest("jetgun");
   }
 }
 
@@ -4111,7 +4041,6 @@ function killZombie(z) {
   // when it is finished off, not every time it falls over.
   if (z.kind === "reviver" && !z.finished) return;
   game.kills++;
-  if (z.questBoss) advanceQuest("boss"); // what came up out of the mine
   maybeDrop(z.group.position);
   curSlot().reserve = Math.min(400, curSlot().reserve + curWeapon().pickup);
   trimCorpses();
@@ -5707,7 +5636,6 @@ function toLobby() {
   ui.lobby.classList.remove("hidden");
   $("power-btn").classList.add("hidden");
   renderPanel();
-  updateQuestHud();
 }
 
 // ── start / restart ──────────────────────────────────────────────
@@ -5721,7 +5649,6 @@ function beginPlay() {
   clock.getDelta(); // drop the accumulated idle time
   grabMouse();
   audio();
-  updateQuestHud();
 }
 
 function resetGame() {
@@ -7025,7 +6952,6 @@ if (import.meta.env.DEV) {
     carried,
     builtSet: built,
     quest,
-    QUEST_STEPS,
     leroy,
     bank,
     packCurrentWeapon,

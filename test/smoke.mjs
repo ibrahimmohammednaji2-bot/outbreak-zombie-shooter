@@ -714,42 +714,34 @@ else {
 }
 
 /*
- * The whole quest, start to finish, in order. Every step has to be reachable
- * and every step has to refuse to be skipped — a chain where one link opens
- * early is a chain that finishes itself.
+ * The machines, in the order you would actually reach them. There is no quest
+ * chaining these together any more — each is its own thing — so what matters
+ * is that each works and that the Pack-a-Punch still refuses without power.
  */
-step("the quest runs end to end and cannot be short-cut");
-const questRun = await page.evaluate(async () => {
+step("the machines all work, and the Pack-a-Punch still needs power")
+const works = await page.evaluate(async () => {
   const p = window.__probe;
   p.game.mapId = "town";
   p.resetGame();
   p.beginPlay();
-  const log = [];
-  const at = () => p.quest.step;
 
-  // nothing may be skipped: the train must refuse before the work is done
+  // no power yet: the machine must refuse
   p.game.points = 999999;
-  p.boardTrain();
-  const trainRefusedEarly = !p.quest.won;
-
-  // the Pack-a-Punch must refuse before there is power
   p.game.slots = [{ id: "ak47", mag: 30, reserve: 90 }];
   p.game.weapon = 0;
   p.packCurrentWeapon();
   const papRefusedUnpowered = !p.game.slots[0].up;
 
-  // 1: collect the turbine parts and build it
+  // turbine: collect its parts, build it, plug it in
   for (const part of p.partPickups) {
     if (part.id === "turbine") p.carried.turbine = (p.carried.turbine ?? 0) + 1;
   }
   p.buildAtBench();
-  log.push(["turbine built", p.builtSet.has("turbine"), at()]);
-
-  // 2: put it in the socket
+  const turbineBuilt = p.builtSet.has("turbine");
   p.placeTurbine(p.turbineSockets[0]);
-  log.push(["power on", p.quest.powered, at()]);
+  const powered = p.quest.powered;
 
-  // now the Pack-a-Punch works, and doubles what it should
+  // now it works, and doubles what it should
   const base = p.WEAPONS.find((w) => w.id === "ak47");
   p.game.points = 999999;
   p.packCurrentWeapon();
@@ -758,54 +750,45 @@ const questRun = await page.evaluate(async () => {
     ? { damage: up.damage / base.damage, mag: up.mag / base.mag, reserve: up.reserve / base.reserve, name: up.name }
     : null;
 
-  // 3: pay off the lock
+  // the prisoner, and the vault only he opens
   p.game.points = 999999;
   p.freeLeroy();
-  log.push(["prisoner out", p.leroy.alive, at()]);
-
-  // 4: he takes the vault door off — walk him onto it
+  const freed = p.leroy.alive;
   const vault = p.barriers.find((b) => b.vault);
-  if (vault) {
+  if (vault && p.leroy.group) {
     p.leroy.group.position.set(vault.x, 0, vault.z);
     p.player.pos.set(vault.x, 0, vault.z);
     for (let i = 0; i < 40 && !p.quest.vaultOpen; i++) await new Promise((r) => setTimeout(r, 150));
   }
-  log.push(["vault open", p.quest.vaultOpen, at()]);
 
-  // 5: the jet gun, out of the box — keep buying until it comes up
-  p.game.points = 999999;
-  const box = p.mysteryBoxes[0];
-  if (box) p.player.pos.set(box.x, box.y, box.z);
+  // the jet gun, out of the box
   let holdingJetGun = false;
   for (let i = 0; i < 400 && !holdingJetGun; i++) {
     p.game.points = 999999;
     p.useBoxDirect();
     holdingJetGun = p.game.slots.some((s) => s.id === "jetgun");
   }
-  log.push(["jet gun out of the box", holdingJetGun, at()]);
 
-  // 6: whatever came up out of the mine
-  const boss = p.zombies.find((z) => z.questBoss);
-  if (boss) { boss.rising = 0; p.killZombie(boss); }
-  log.push(["boss down", at() >= 6, at()]);
-
-  // 7: and out
+  // and the way out, which now only costs the fare
   p.game.points = 999999;
   p.boardTrain();
-  log.push(["got out", p.quest.won, at()]);
 
-  return { log, trainRefusedEarly, papRefusedUnpowered, packed, holdingJetGun, steps: p.QUEST_STEPS.length };
+  return {
+    papRefusedUnpowered, turbineBuilt, powered, packed, freed,
+    vaultOpen: p.quest.vaultOpen, holdingJetGun, won: p.quest.won,
+  };
 });
 
-for (const [what, ok, atStep] of questRun.log) {
-  if (!ok) note(`the quest stalled at "${what}" (step ${atStep} of ${questRun.steps})`);
-}
-if (!questRun.trainRefusedEarly) note("the train let you leave before the quest was done");
-if (!questRun.papRefusedUnpowered) note("the Pack-a-Punch worked with no power");
-if (!questRun.holdingJetGun) note("building the jet gun did not put it in your hands");
-if (!questRun.packed) note("the Pack-a-Punch did not upgrade the gun");
+if (!works.papRefusedUnpowered) note("the Pack-a-Punch worked with no power");
+if (!works.turbineBuilt) note("the turbine did not build from a full set of parts");
+if (!works.powered) note("plugging the turbine in did not switch the power on");
+if (!works.freed) note("paying off the lock did not free the prisoner");
+if (!works.vaultOpen) note("the prisoner did not take the vault door off");
+if (!works.holdingJetGun) note("the jet gun never came out of the box");
+if (!works.won) note("paying the fare did not end the run");
+if (!works.packed) note("the Pack-a-Punch did not upgrade the gun");
 else {
-  const { damage, mag, reserve, name } = questRun.packed;
+  const { damage, mag, reserve, name } = works.packed;
   step(`  packed an AK into "${name}" — ${damage}× damage, ${mag}× magazine, ${reserve}× reserve`);
   for (const [what, got] of [["damage", damage], ["magazine", mag], ["reserve", reserve]]) {
     if (Math.abs(got - 2) > 0.01) note(`Pack-a-Punch gave ${got}× ${what}, expected exactly 2×`);
