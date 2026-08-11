@@ -1147,13 +1147,15 @@ function mineHead(x, z, seed) {
  * walk over — you have to be able to, or the streets stop being streets — and
  * standing in it is what hurts. `lavaPools` is what the damage checks read.
  */
+const LAVA_DEEP = 0xd8140e;
+const LAVA_HOT = 0xff3a24;
 const lavaPools = []; // whichever map is standing
 function lavaCrack(sink, x, z, w, d, r = 0) {
   sink.push({ x, z, hw: w / 2, hd: d / 2, cos: Math.cos(-r), sin: Math.sin(-r) });
   return [
     // red, with a hotter red down the middle of it
-    { ...box(x, z, w, 0.12, d, 0xc41111, r, 0.02), clip: false },
-    { ...box(x, z, w * 0.72, 0.16, d * 0.72, 0xff2a18, r, 0.05), clip: false },
+    { ...box(x, z, w, 0.12, d, LAVA_DEEP, r, 0.02), clip: false },
+    { ...box(x, z, w * 0.72, 0.16, d * 0.72, LAVA_HOT, r, 0.05), clip: false },
     // the broken lip of the road either side
     box(x, z, w + 0.9, 0.34, d + 0.9, 0x2f2a26, r),
   ];
@@ -2059,9 +2061,24 @@ function buildMap(def) {
   // One material per colour, three shared geometries scaled per prop — a
   // forest is hundreds of pieces and they must not each allocate their own.
   const mats = new Map();
+  /*
+   * Lava is not lit by the map — it is the thing doing the lighting. Every
+   * other prop is Lambert and takes its brightness from the moon and the
+   * braziers, which in a dim street turns a red box into dark maroon. That is
+   * why changing the colour alone did nothing: it was the right red, rendered
+   * at a quarter brightness. These two are unlit, so they come out at exactly
+   * the colour they are given.
+   */
+  const SELF_LIT = new Set([LAVA_DEEP, LAVA_HOT]);
   const matFor = (hex) => {
-    if (!mats.has(hex))
-      mats.set(hex, new THREE.MeshLambertMaterial({ color: hex }));
+    if (!mats.has(hex)) {
+      mats.set(
+        hex,
+        SELF_LIT.has(hex)
+          ? new THREE.MeshBasicMaterial({ color: hex })
+          : new THREE.MeshLambertMaterial({ color: hex }),
+      );
+    }
     return mats.get(hex);
   };
 
@@ -4317,15 +4334,22 @@ function drawMinimap() {
   const R = cv.width / 2;
   ctx.clearRect(0, 0, cv.width, cv.height);
 
-  // north is where you are looking, so left on the dial is left on the screen
+  /*
+   * The dial holds still and the arrow turns.
+   *
+   * The other way round — rotating everything so what you are facing is always
+   * up — means the whole picture swings every time you look about, which is
+   * exactly when you are trying to read it. A fixed map you can learn; a
+   * spinning one you cannot.
+   */
   const facing = Math.atan2(camDir.x, camDir.z);
   const place = (x, z) => {
     const dx = x - player.pos.x;
     const dz = z - player.pos.z;
     const d = Math.hypot(dx, dz);
     if (d > MINIMAP_RANGE) return null;
-    const a = Math.atan2(dx, dz) - facing;
     const r = (d / MINIMAP_RANGE) * (R - 8);
+    const a = Math.atan2(dx, dz);
     return [R + Math.sin(a) * r, R - Math.cos(a) * r];
   };
 
