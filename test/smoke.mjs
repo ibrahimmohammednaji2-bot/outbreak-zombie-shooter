@@ -925,6 +925,47 @@ for (const [id, n] of Object.entries(lights.out)) {
   if (n > lights.budget + 3) note(`${id} has ${n} dynamic lights, over the budget of ${lights.budget}`);
 }
 
+// ── the minimap ──
+step("the minimap draws zombies as dots")
+const mini = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  p.beginPlay();
+  p.player.pos.set(0, 0, 0);
+  for (const z of [...p.zombies]) p.killZombie(z);
+
+  const cv = document.getElementById("minimap");
+  if (!cv) return { error: "no minimap canvas" };
+  const ctx = cv.getContext("2d");
+  const red = () => {
+    const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 180 && d[i + 1] < 110 && d[i + 3] > 40) n++;
+    return n;
+  };
+
+  await new Promise((r) => setTimeout(r, 900));
+  const empty = red();
+
+  // stand a few of them right next to us and see the dots appear
+  for (let i = 0; i < 5; i++) {
+    const z = p.spawnZombie(3);
+    z.kind = "walker";
+    z.rising = 0;
+    z.group.position.set(6 + i * 2, 0, 4);
+  }
+  await new Promise((r) => setTimeout(r, 1200));
+  const withZombies = red();
+  return { empty, withZombies, shown: cv.style.display !== "none" };
+});
+if (mini.error) note(mini.error);
+else {
+  step(`  ${mini.empty} red pixels with the map clear, ${mini.withZombies} with five zombies alongside`);
+  if (!mini.shown) note("the minimap is not showing during a game");
+  if (!(mini.withZombies > mini.empty + 20)) note("zombies did not appear as dots on the minimap");
+}
+
 // ── the last-resort panel must stay out of the way when nothing is wrong ──
 step("no crash panel on a healthy load");
 const crash = await page.evaluate(() => {

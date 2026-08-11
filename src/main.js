@@ -637,6 +637,7 @@ addEventListener("unhandledrejection", (e) => fatal("promise", e.reason));
 const $ = (id) => document.getElementById(id);
 const ui = {
   hud: $("hud"),
+  minimap: $("minimap"),
   crosshair: $("crosshair"),
   healthBar: $("health-bar"),
   healthText: $("health-text"),
@@ -4099,6 +4100,85 @@ function activatePower() {
   updatePowerHud();
 }
 
+/* ── the minimap ─────────────────────────────────────────────── */
+
+/*
+ * A dot for every zombie on its feet, and you in the middle facing up. It is
+ * deliberately not a map of the place — no walls, no buildings — because what
+ * you want from a glance is which way they are coming from, and a drawing of
+ * the town would bury that under detail.
+ *
+ * Drawn at 8 Hz, not every frame: it is a canvas, not the game, and nobody can
+ * see the difference.
+ */
+const MINIMAP_RANGE = 55; // how far out it shows, in world units
+let miniAt = 0;
+
+function drawMinimap() {
+  const cv = ui.minimap;
+  if (!cv) return;
+  const show = game.running && !game.over && !inLobby;
+  cv.style.display = show ? "block" : "none";
+  if (!show) return;
+
+  const ctx = cv.getContext("2d");
+  const R = cv.width / 2;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  // north is where you are looking, so left on the dial is left on the screen
+  const facing = Math.atan2(camDir.x, camDir.z);
+  const place = (x, z) => {
+    const dx = x - player.pos.x;
+    const dz = z - player.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > MINIMAP_RANGE) return null;
+    const a = Math.atan2(dx, dz) - facing;
+    const r = (d / MINIMAP_RANGE) * (R - 8);
+    return [R + Math.sin(a) * r, R - Math.cos(a) * r];
+  };
+
+  const dot = (x, z, colour, size) => {
+    const at = place(x, z);
+    if (!at) return;
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.arc(at[0], at[1], size, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  // the rings, so distance reads at a glance
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  for (const k of [0.33, 0.66]) {
+    ctx.beginPath();
+    ctx.arc(R, R, (R - 8) * k, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // what is worth walking to, under the zombies rather than over them
+  for (const m of perkMachines) dot(m.x, m.z, "rgba(95,215,122,0.75)", 2.5);
+  for (const b of mysteryBoxes) dot(b.x, b.z, "rgba(255,180,60,0.85)", 3);
+  for (const p of partPickups) if (!p.taken) dot(p.x, p.z, "rgba(111,211,255,0.8)", 2.5);
+  for (const m of packMachines) dot(m.x, m.z, "rgba(63,143,90,0.9)", 3);
+  for (const t of bankTellers) dot(t.x, t.z, "rgba(201,162,39,0.9)", 3);
+
+  // the zombies, which is what it is for. A boss gets a bigger dot.
+  for (const z of zombies) {
+    if (!stillFighting(z)) continue;
+    const boss = ZOMBIE_TYPES[z.kind]?.boss;
+    dot(z.group.position.x, z.group.position.z, boss ? "#ff9d3b" : "#ff4a4a", boss ? 4 : 2.6);
+  }
+  if (leroy.alive) dot(leroy.x, leroy.z, "#6fd3ff", 4);
+
+  // and you, pointing the way you are looking
+  ctx.fillStyle = "#e8efe6";
+  ctx.beginPath();
+  ctx.moveTo(R, R - 6);
+  ctx.lineTo(R - 4.5, R + 5);
+  ctx.lineTo(R + 4.5, R + 5);
+  ctx.closePath();
+  ctx.fill();
+}
+
 /** Everything a power does the moment it is pressed. */
 function applyPowerPart(part) {
   const { effect, amount } = part;
@@ -4801,6 +4881,20 @@ function animate() {
   );
   vm.rotation.set(game.recoil * 3.2 * (1 - ease * 0.5), game.reloadTimer > 0 ? 0.45 : 0, 0);
   muzzleLight.intensity *= 0.72;
+
+  /*
+   * The dial in the corner, at 8 Hz — it is a canvas, not the game.
+   *
+   * The second half of that test is not paranoia: this holds a game.time, and
+   * a new run winds that clock back to zero, so without it the next game's
+   * minimap freezes on the last game's picture. Two other things in here have
+   * had the same bug.
+   */
+  if (game.time < miniAt) miniAt = 0;
+  if (game.time - miniAt > 0.125) {
+    miniAt = game.time;
+    drawMinimap();
+  }
 
   // effects
   for (const p of blood) {
