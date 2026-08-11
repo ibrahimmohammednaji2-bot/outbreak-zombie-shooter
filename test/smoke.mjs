@@ -769,13 +769,9 @@ const works = await page.evaluate(async () => {
     holdingJetGun = p.game.slots.some((s) => s.id === "jetgun");
   }
 
-  // and the way out, which now only costs the fare
-  p.game.points = 999999;
-  p.boardTrain();
-
   return {
     papRefusedUnpowered, turbineBuilt, powered, packed, freed,
-    vaultOpen: p.quest.vaultOpen, holdingJetGun, won: p.quest.won,
+    vaultOpen: p.quest.vaultOpen, holdingJetGun,
   };
 });
 
@@ -785,7 +781,6 @@ if (!works.powered) note("plugging the turbine in did not switch the power on");
 if (!works.freed) note("paying off the lock did not free the prisoner");
 if (!works.vaultOpen) note("the prisoner did not take the vault door off");
 if (!works.holdingJetGun) note("the jet gun never came out of the box");
-if (!works.won) note("paying the fare did not end the run");
 if (!works.packed) note("the Pack-a-Punch did not upgrade the gun");
 else {
   const { damage, mag, reserve, name } = works.packed;
@@ -901,6 +896,33 @@ for (const [id, want] of [
 ]) {
   const got = sights.magnify[id];
   if (got !== want) note(`${id} magnifies ${got}×, expected ${want}×`);
+}
+
+/*
+ * What made the big maps crawl. Three.js works every light out for every lit
+ * pixel in one pass, so the cost is lights times pixels whether the light
+ * reaches anything or not — and the city was carrying better than twenty.
+ */
+step("no map floods the scene with dynamic lights")
+const lights = await page.evaluate(() => {
+  const p = window.__probe;
+  const count = () => {
+    let n = 0;
+    p.scene.traverse((o) => { if (o.isPointLight && o.visible) n++; });
+    return n;
+  };
+  const out = {};
+  for (const m of p.MAPS) {
+    p.game.mapId = m.id;
+    p.resetGame();
+    out[m.id] = count();
+  }
+  return { out, budget: p.LIGHT_BUDGET };
+});
+step(`  ${Object.entries(lights.out).map(([k, v]) => `${k} ${v}`).join(", ")} (budget ${lights.budget})`);
+for (const [id, n] of Object.entries(lights.out)) {
+  // the budget, plus the muzzle flash, plus a little room
+  if (n > lights.budget + 3) note(`${id} has ${n} dynamic lights, over the budget of ${lights.budget}`);
 }
 
 // ── the last-resort panel must stay out of the way when nothing is wrong ──

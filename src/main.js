@@ -1818,6 +1818,7 @@ function clearMap() {
 }
 
 function buildMap(def) {
+  lightsUsed = 0; // a fresh map gets the whole light budget back
   clearMap();
   mapDef = def;
   HALF = def.half;
@@ -1935,10 +1936,14 @@ function buildMap(def) {
   }
 
   for (const [bx, bz] of def.fires) {
-    const light = new THREE.PointLight(0xff7a2a, 2.4, 24, 2);
-    light.position.set(bx, 1.6, bz);
-    mapGroup.add(light);
-    fires.push(light);
+    // the barrel always stands; whether it lights the street depends on how
+    // many are already doing so
+    const light = budgetLight(0xff7a2a, 2.6, 22);
+    if (light) {
+      light.position.set(bx, 1.6, bz);
+      mapGroup.add(light);
+      fires.push(light);
+    }
 
     const barrel = new THREE.Mesh(
       new THREE.CylinderGeometry(0.5, 0.45, 1.1, 12),
@@ -1965,9 +1970,11 @@ function buildMap(def) {
     crate.castShadow = crate.receiveShadow = true;
     mapGroup.add(crate);
 
-    const glow = new THREE.PointLight(0xffb43c, 2.6, 9, 2);
-    glow.position.set(b.x, b.y + 1.3, b.z);
-    mapGroup.add(glow);
+    const glow = budgetLight(0xffb43c, 2.6, 9);
+    if (glow) {
+      glow.position.set(b.x, b.y + 1.3, b.z);
+      mapGroup.add(glow);
+    }
 
     mysteryBoxes.push({ x: b.x, y: b.y, z: b.z, mesh: crate, glow });
     obstacles.push({
@@ -2159,6 +2166,31 @@ function buildViewmodel(id) {
 const viewmodels = Object.fromEntries(
   WEAPONS.map((w) => [w.id, buildViewmodel(w.id)]),
 );
+
+/*
+ * A budget for dynamic lights, because they are what was making the big maps
+ * crawl.
+ *
+ * Three.js lights the scene in one pass: every light is worked out for every
+ * lit pixel, so cost is lights × pixels whether the light reaches that pixel
+ * or not. The city had ten braziers, four perk machines, the box, the
+ * Pack-a-Punch, the bank, two benches, a socket and three glowing parts all
+ * carrying one each — better than twenty, and a shader recompile every time
+ * the count changed.
+ *
+ * Anything that only needs to be *seen* in the dark does not need a light at
+ * all: an emissive material glows on its own for nothing. Lights are for
+ * things that light their surroundings, and there is a hard ceiling on those.
+ */
+const LIGHT_BUDGET = 7;
+let lightsUsed = 0;
+
+/** A light, if there is room in the budget. Returns null when there is not. */
+function budgetLight(colour, intensity, distance) {
+  if (lightsUsed >= LIGHT_BUDGET) return null;
+  lightsUsed++;
+  return new THREE.PointLight(colour, intensity, distance, 2);
+}
 
 const muzzleLight = new THREE.PointLight(0xffd28a, 0, 9, 2);
 muzzleLight.position.set(0.26, -0.2, -1.1);
@@ -2604,7 +2636,7 @@ const bankTellers = [];
 
 function addPackMachine(x, z, y = 0) {
   const mat = new THREE.MeshLambertMaterial({
-    color: 0x3f8f5a, emissive: 0x1d5c33, emissiveIntensity: 0.5,
+    color: 0x3f8f5a, emissive: 0x3f8f5a, emissiveIntensity: 0.9,
   });
   const body = new THREE.Mesh(UNIT_BOX, mat);
   body.scale.set(2.4, 2.6, 1.6);
@@ -2618,12 +2650,8 @@ function addPackMachine(x, z, y = 0) {
   slot.position.set(x, y + 1.6, z + 0.85);
   mapGroup.add(slot);
 
-  const glow = new THREE.PointLight(0x5fd77a, 3, 14, 2);
-  glow.position.set(x, y + 2.8, z);
-  mapGroup.add(glow);
-
   obstacles.push({ x, z, hw: 1.25, hd: 0.85, bottom: y, top: y + 2.6, cos: 1, sin: 0 });
-  packMachines.push({ x, z, y, glow });
+  packMachines.push({ x, z, y });
 }
 
 function packCurrentWeapon() {
@@ -2685,7 +2713,7 @@ const BANK_STEP = 1000;
 
 function addBankTeller(x, z, y = 0) {
   const mat = new THREE.MeshLambertMaterial({
-    color: 0xc9a227, emissive: 0x4a3a06, emissiveIntensity: 0.4,
+    color: 0xc9a227, emissive: 0xc9a227, emissiveIntensity: 0.75,
   });
   const desk = new THREE.Mesh(UNIT_BOX, mat);
   desk.scale.set(3, 1.2, 1);
@@ -2698,12 +2726,8 @@ function addBankTeller(x, z, y = 0) {
   grille.position.set(x, y + 1.75, z);
   mapGroup.add(grille);
 
-  const glow = new THREE.PointLight(0xffc94a, 2.2, 11, 2);
-  glow.position.set(x, y + 2.4, z);
-  mapGroup.add(glow);
-
   obstacles.push({ x, z, hw: 1.5, hd: 0.55, bottom: y, top: y + 1.2, cos: 1, sin: 0 });
-  bankTellers.push({ x, z, y, glow });
+  bankTellers.push({ x, z, y });
 }
 
 function useBank(withdraw) {
@@ -2794,11 +2818,7 @@ function addWallBuy(x, z, weaponId, cost) {
   mesh.position.set(x, 1.5, z);
   mapGroup.add(mesh);
 
-  const glow = new THREE.PointLight(0xffb43c, 1.6, 7, 2);
-  glow.position.set(x, 1.6, z);
-  mapGroup.add(glow);
-
-  wallBuys.push({ x, z, y: 0, weaponId, cost, name: w?.name ?? weaponId, mesh, mat, glow });
+  wallBuys.push({ x, z, y: 0, weaponId, cost, name: w?.name ?? weaponId, mesh, mat });
 }
 
 /** Buy the gun off the wall, or top it up if you already carry it. */
@@ -2850,7 +2870,6 @@ const carried = {}; // id → how many of its parts you have
 const built = new Set();
 const workbenches = [];
 const turbineSockets = [];
-const trainStops = [];
 
 // what has been switched on and opened this run
 const quest = { powered: false, vaultOpen: false, won: false };
@@ -2875,18 +2894,14 @@ function scatterParts(def, seed) {
     const mat = new THREE.MeshLambertMaterial({
       color: def.id === "turbine" ? 0x6fd3ff : 0xffb43c,
       emissive: def.id === "turbine" ? 0x1d4a5c : 0x4a3206,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 1,
     });
     const mesh = new THREE.Mesh(UNIT_BOX, mat);
     mesh.scale.set(0.8, 0.4, 0.55);
     mesh.position.set(x, 0.55, z);
     mapGroup.add(mesh);
 
-    const glow = new THREE.PointLight(def.id === "turbine" ? 0x6fd3ff : 0xffb43c, 1.8, 8, 2);
-    glow.position.set(x, 0.9, z);
-    mapGroup.add(glow);
-
-    partPickups.push({ id: def.id, x, z, mesh, mat, glow, taken: false });
+    partPickups.push({ id: def.id, x, z, mesh, mat, taken: false });
   }
 }
 
@@ -2899,7 +2914,7 @@ function updateParts(dt) {
     if (Math.abs(player.pos.y) > 2.5) continue;
 
     p.taken = true;
-    mapGroup.remove(p.mesh, p.glow);
+    mapGroup.remove(p.mesh);
     p.mat.dispose();
     carried[p.id] = (carried[p.id] ?? 0) + 1;
     const def = buildableById(p.id);
@@ -2916,12 +2931,8 @@ function addWorkbench(x, z, y = 0) {
   top.castShadow = top.receiveShadow = true;
   mapGroup.add(top);
 
-  const glow = new THREE.PointLight(0xffd28a, 1.4, 8, 2);
-  glow.position.set(x, y + 1.7, z);
-  mapGroup.add(glow);
-
   obstacles.push({ x, z, hw: 1.6, hd: 0.7, bottom: y, top: y + 0.9, cos: 1, sin: 0 });
-  workbenches.push({ x, z, y, glow });
+  workbenches.push({ x, z, y });
 }
 
 /** What the bench would make right now, or null. */
@@ -2976,9 +2987,11 @@ function placeTurbine(socket) {
   mapGroup.add(spin);
   socket.spin = spin;
 
-  const glow = new THREE.PointLight(0x6fd3ff, 4, 18, 2);
-  glow.position.set(socket.x, socket.y + 2.2, socket.z);
-  mapGroup.add(glow);
+  const glow = budgetLight(0x6fd3ff, 4, 18);
+  if (glow) {
+    glow.position.set(socket.x, socket.y + 2.2, socket.z);
+    mapGroup.add(glow);
+  }
 
   sfx.unlock();
   banner("POWER ON", 2200);
@@ -3100,55 +3113,6 @@ function updateLeroy(dt) {
   }
 }
 
-/*
- * The way out. It only runs once the quest is done, and it costs — an ending
- * you can buy is still an ending you have to earn the fare for.
- */
-const TRAIN_FARE = 15000;
-
-function addTrainStop(x, z, y = 0) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0x2a2f38, emissive: 0x0a1218 });
-  const car = new THREE.Mesh(UNIT_BOX, mat);
-  car.scale.set(9, 4, 3.4);
-  car.position.set(x, y + 2, z);
-  car.castShadow = true;
-  mapGroup.add(car);
-
-  const lamp = new THREE.PointLight(0xbfe6ff, 2.6, 16, 2);
-  lamp.position.set(x - 5, y + 3, z);
-  mapGroup.add(lamp);
-
-  obstacles.push({ x, z, hw: 4.5, hd: 1.7, bottom: y, top: y + 4, cos: 1, sin: 0 });
-  trainStops.push({ x, z, y, car, mat, lamp });
-}
-
-function boardTrain() {
-  if (game.points < TRAIN_FARE) {
-    sfx.dryFire();
-    toast(`THE FARE IS ${TRAIN_FARE} — ${TRAIN_FARE - game.points} SHORT`);
-    return;
-  }
-  game.points -= TRAIN_FARE;
-  quest.won = true;
-  winRun();
-}
-
-function winRun() {
-  game.over = true;
-  game.running = false;
-  controls.unlock();
-  earnCoins(200);
-  const h1 = ui.dead.querySelector("h1");
-  h1.textContent = "YOU GOT OUT";
-  h1.className = "";
-  ui.deadWave.textContent = game.wave;
-  ui.deadKills.textContent = game.kills;
-  $("revive-btn").classList.add("hidden");
-  sfx.waveClear();
-  toast("+200 COINS");
-  ui.dead.classList.remove("hidden");
-}
-
 const spotScratch = new THREE.Vector3();
 
 /** Is there room to stand something of this size here? */
@@ -3205,19 +3169,15 @@ function clearSpot(angle, from = HALF * 0.5, min = 6) {
 function addPerkMachine(perk, x, z, y = 0) {
   const body = new THREE.Mesh(
     UNIT_BOX,
-    new THREE.MeshLambertMaterial({ color: perk.colour, emissive: perk.colour, emissiveIntensity: 0.25 }),
+    new THREE.MeshLambertMaterial({ color: perk.colour, emissive: perk.colour, emissiveIntensity: 0.85 }),
   );
   body.scale.set(1.3, 2.1, 1);
   body.position.set(x, y + 1.05, z);
   body.castShadow = true;
   mapGroup.add(body);
 
-  const glow = new THREE.PointLight(perk.colour, 2.4, 12, 2);
-  glow.position.set(x, y + 2.4, z);
-  mapGroup.add(glow);
-
   obstacles.push({ x, z, hw: 0.7, hd: 0.55, bottom: y, top: y + 2.1, cos: 1, sin: 0 });
-  perkMachines.push({ perk, x, z, y, glow });
+  perkMachines.push({ perk, x, z, y });
 }
 
 /*
@@ -3237,7 +3197,6 @@ function placePerkMachines() {
   bankTellers.length = 0;
   workbenches.length = 0;
   turbineSockets.length = 0;
-  trainStops.length = 0;
   partPickups.length = 0;
   built.clear();
   for (const k of Object.keys(carried)) delete carried[k];
@@ -3313,8 +3272,6 @@ function placeTownWorks() {
   // the cell, and the way out at the far end of the map
   const [lx, lz] = spoke(-2.4, 0.5);
   addLeroyCell(lx, lz);
-  const [rx, rz] = spoke(0.9, 0.85);
-  addTrainStop(rx, rz);
 
   for (const [i, def] of BUILDABLES.entries()) scatterParts(def, 9001 + i * 137);
 }
@@ -3650,9 +3607,6 @@ function maybeDrop(pos) {
   mesh.position.set(pos.x, 0.9, pos.z);
   scene.add(mesh);
 
-  const glow = new THREE.PointLight(def.colour, 3, 11, 2);
-  mesh.add(glow);
-
   drops.push({ kind, mesh, base: pos.y + 0.9, life: DROP_LIFE });
 }
 
@@ -3728,8 +3682,15 @@ function launchProjectile(w) {
   mesh.position.copy(camera.position).addScaledVector(camDir, 0.8);
   scene.add(mesh);
 
-  const light = new THREE.PointLight(p.colour, 2.2, 8, 2);
-  mesh.add(light);
+  /*
+   * A rocket in flight lights its own way, but it must not eat the map's
+   * budget — that is spent once and never given back, and a few rockets would
+   * leave the braziers dark for the rest of the run. Only the first couple in
+   * the air carry one, which is as many as you can follow anyway.
+   */
+  if (projectiles.length < 2) {
+    mesh.add(new THREE.PointLight(p.colour, 2.2, 8, 2));
+  }
 
   projectiles.push({
     mesh,
@@ -3851,7 +3812,6 @@ function thingInReach() {
   if (leroy.cell && !leroy.alive) {
     consider({ kind: "leroy" }, leroy.cell.x, leroy.cell.z + 1.6, leroy.cell.y, 3.4);
   }
-  for (const t of trainStops) consider({ kind: "train", stop: t }, t.x, t.z, t.y, 5);
   return best;
 }
 
@@ -3895,7 +3855,6 @@ function describeThing(t) {
       : { cost: 0, owned: true, line: "TURBINE SOCKET — NOTHING TO PUT IN IT" };
   }
   if (t.kind === "leroy") return { cost: LEROY_COST, line: `PAY OFF THE LOCK — ${LEROY_COST} POINTS` };
-  if (t.kind === "train") return { cost: TRAIN_FARE, line: `TAKE THE TRAIN OUT — ${TRAIN_FARE} POINTS` };
   return { cost: 0, line: "" };
 }
 
@@ -3908,7 +3867,6 @@ function actOnThing(t) {
   if (t.kind === "bench") return buildAtBench();
   if (t.kind === "socket") return placeTurbine(t.socket);
   if (t.kind === "leroy") return freeLeroy();
-  if (t.kind === "train") return boardTrain();
   return null;
 }
 
@@ -4873,7 +4831,7 @@ function animate() {
   for (const mb of mysteryBoxes) {
     mb.mesh.rotation.y += dt * 0.6;
     mb.mesh.position.y = mb.y + 0.58 + Math.sin(f * 2) * 0.07;
-    mb.glow.intensity = 2.2 + Math.sin(f * 3) * 0.5;
+    if (mb.glow) mb.glow.intensity = 2.2 + Math.sin(f * 3) * 0.5;
   }
 
   renderer.render(scene, camera);
@@ -6947,7 +6905,6 @@ if (import.meta.env.DEV) {
     bankTellers,
     workbenches,
     turbineSockets,
-    trainStops,
     partPickups,
     carried,
     builtSet: built,
@@ -6960,10 +6917,11 @@ if (import.meta.env.DEV) {
     buildAtBench,
     placeTurbine,
     freeLeroy,
-    boardTrain,
     weaponFor,
     magnifyOf,
     liveCap,
+    scene,
+    LIGHT_BUDGET,
     obstacles,
     mysteryBoxes,
     PLAYER_R,
