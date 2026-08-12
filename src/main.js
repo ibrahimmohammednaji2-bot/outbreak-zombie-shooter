@@ -1607,16 +1607,28 @@ const transitMarks = [];
 const transitLava = [];
 
 /*
- * The bus route: the five stops, in the order the bus visits them. The road
- * is drawn along these and the bus drives between them, so moving a stop moves
- * both and they cannot drift apart.
+ * The bus route: five stops with a bend between each, in the order the bus
+ * visits them. The road is drawn along these and the bus drives between them,
+ * so moving a point moves both and they cannot come apart.
+ *
+ * These numbers are not hand-placed. The first route ran from the middle of
+ * one area to the middle of the next and drove through everything in between —
+ * seven to eleven units deep inside solid geometry on every leg. A search over
+ * the map's own obstacle list moved the stops to the edges of their areas and
+ * bent the legs around what was left, which is also how a bus stop works: you
+ * get off at the edge of a place and walk in. test/smoke.mjs keeps it honest.
  */
 const ROUTE = [
-  [0, 148], // the depot
-  [-112, 44], // the diner
-  [-26, -112], // the farm
-  [112, 40], // the power station
-  [0, 4], // the town
+  [-2, 104], // the depot
+  [-48, 94],
+  [-102, 10], // the diner
+  [-67, -42],
+  [14, -70], // the farm
+  [65, -44],
+  [68, 68], // the power station
+  [18, 6],
+  [32, 52], // the town, on its outskirts
+  [16, 76],
 ];
 const farmMarks = [];
 const townMarks = [];

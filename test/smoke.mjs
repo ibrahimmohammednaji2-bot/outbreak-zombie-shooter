@@ -1023,7 +1023,8 @@ const busRun = await page.evaluate(async () => {
   return out;
 });
 step(`  ${busRun.stops} stops, ${busRun.props} props; rode ${busRun.busTravelled} units, worst drift ${busRun.gapDrift}`);
-if (busRun.stops !== 5) note(`TranZit has ${busRun.stops} stops, expected 5`);
+// five places, with a bend between each so the legs can go round the buildings
+if (busRun.stops !== 10) note(`the bus route has ${busRun.stops} points, expected 10`);
 if (busRun.props < 600) note(`TranZit only has ${busRun.props} props for a map that size`);
 if (busRun.moved < 4) note("the bus never moved");
 if (busRun.busTravelled > 2 && busRun.gapDrift > 8)
@@ -1031,6 +1032,50 @@ if (busRun.busTravelled > 2 && busRun.gapDrift > 8)
 if (busRun.busTravelled > 20 && !busRun.stillAboard)
   note("you were left behind partway along the route");
 if (Math.abs(busRun.deck - 1.05) > 0.01) note(`the bus deck is at ${busRun.deck}, expected 1.05`);
+
+/*
+ * The bus must not drive through the town. Every leg is sampled along its
+ * length and tested against the map's own obstacle list at the bus's width —
+ * the first route was seven to eleven units inside solid geometry on all five
+ * legs, and it looked fine until you rode it.
+ */
+step("the bus route is clear of the buildings")
+const clearance = await page.evaluate(() => {
+  const p = window.__probe;
+  p.game.mapId = "tranzit";
+  p.resetGame();
+  const HW = p.BUS.W + 0.8;
+  const TOP = p.BUS.FLOOR + p.BUS.H;
+  const solid = p.obstacles.filter((o) => o.top > 0.5 && o.bottom < TOP);
+  const route = p.MAPS.find((m) => m.id === "tranzit").route;
+
+  let worst = 0;
+  let where = null;
+  for (let i = 0; i < route.length; i++) {
+    const a = route[i];
+    const c = route[(i + 1) % route.length];
+    const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    const steps = Math.max(2, Math.ceil(len / 1.5));
+    for (let k = 0; k <= steps; k++) {
+      const tt = k / steps;
+      const x = a[0] + (c[0] - a[0]) * tt;
+      const z = a[1] + (c[1] - a[1]) * tt;
+      for (const o of solid) {
+        const dx = x - o.x, dz = z - o.z;
+        const lx = dx * o.cos - dz * o.sin;
+        const lz = dx * o.sin + dz * o.cos;
+        const ox = o.hw + HW - Math.abs(lx);
+        const oz = o.hd + HW - Math.abs(lz);
+        const over = Math.min(ox, oz);
+        if (ox > 0 && oz > 0 && over > worst) { worst = over; where = [Math.round(x), Math.round(z)]; }
+      }
+    }
+  }
+  return { worst: +worst.toFixed(2), where, legs: route.length };
+});
+step(`  ${clearance.legs} legs, deepest overlap ${clearance.worst} units`);
+if (clearance.worst > 2)
+  note(`the bus drives ${clearance.worst} units into something at ${clearance.where}`);
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")
