@@ -1024,7 +1024,7 @@ const busRun = await page.evaluate(async () => {
 });
 step(`  ${busRun.stops} stops, ${busRun.props} props; rode ${busRun.busTravelled} units, worst drift ${busRun.gapDrift}`);
 // five places, with a bend between each so the legs can go round the buildings
-if (busRun.stops !== 10) note(`the bus route has ${busRun.stops} points, expected 10`);
+if (busRun.stops < 10) note(`the bus route has ${busRun.stops} points, expected at least 10`);
 if (busRun.props < 600) note(`TranZit only has ${busRun.props} props for a map that size`);
 if (busRun.moved < 4) note("the bus never moved");
 if (busRun.busTravelled > 2 && busRun.gapDrift > 8)
@@ -1044,7 +1044,13 @@ const clearance = await page.evaluate(() => {
   const p = window.__probe;
   p.game.mapId = "tranzit";
   p.resetGame();
-  const HW = p.BUS.W + 0.8;
+  /*
+   * A disc the length of the bus, swept along the centre line. The first
+   * version of this test used a corridor only as wide as the bus and passed
+   * while the bus was still driving through houses — the bus is fifteen units
+   * long and turns, so its ends sweep through what its middle missed.
+   */
+  const HW = p.BUS.D + 1;
   const TOP = p.BUS.FLOOR + p.BUS.H;
   const solid = p.obstacles.filter((o) => o.top > 0.5 && o.bottom < TOP);
   const route = p.MAPS.find((m) => m.id === "tranzit").route;
@@ -1074,7 +1080,12 @@ const clearance = await page.evaluate(() => {
   return { worst: +worst.toFixed(2), where, legs: route.length };
 });
 step(`  ${clearance.legs} legs, deepest overlap ${clearance.worst} units`);
-if (clearance.worst > 2)
+/*
+ * A tenth of a unit is the search's convergence floor against a disc that is
+ * deliberately larger than the bus in most orientations — not a collision.
+ * Anything approaching half a unit is.
+ */
+if (clearance.worst > 0.4)
   note(`the bus drives ${clearance.worst} units into something at ${clearance.where}`);
 
 // ── the minimap ──

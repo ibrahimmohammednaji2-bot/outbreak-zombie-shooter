@@ -1619,17 +1619,44 @@ const transitLava = [];
  * get off at the edge of a place and walk in. test/smoke.mjs keeps it honest.
  */
 const ROUTE = [
-  [-2, 104], // the depot
-  [-48, 94],
-  [-102, 10], // the diner
-  [-67, -42],
-  [14, -70], // the farm
-  [65, -44],
+  [-13.5, 117.8], // the depot
+  [-70.8, 46.3],
+  [-93.5, 12],
+  [-92, -10], // the diner
+  [-56, -42],
+  [-20, -46],
+  [52, -60], // the farm
+  [61, -9],
+  [69, -17],
   [68, 68], // the power station
-  [18, 6],
+  [50, 60],
   [32, 52], // the town, on its outskirts
-  [16, 76],
+  [15, 78],
 ];
+
+/*
+ * Is this spot on the road? The bus is fifteen units long and turns, so
+ * nothing solid may stand within about its own length of the centre line —
+ * otherwise the ends of it sweep through whatever the middle missed. Used to
+ * keep the scattered scenery off the route, because a road with a tree in it
+ * is not a road.
+ */
+function onRoute(x, z, margin = 11) {
+  for (let i = 0; i < ROUTE.length; i++) {
+    const [ax, az] = ROUTE[i];
+    const [bx, bz] = ROUTE[(i + 1) % ROUTE.length];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len2 = dx * dx + dz * dz || 1;
+    let t = ((x - ax) * dx + (z - az) * dz) / len2;
+    t = Math.max(0, Math.min(1, t));
+    if (Math.hypot(x - (ax + dx * t), z - (az + dz * t)) < margin) return true;
+  }
+  return false;
+}
+
+/** Drop anything a scatter put on the road. */
+const offRoute = (list) => list.filter((prop) => !prop || !onRoute(prop.x, prop.z));
 const farmMarks = [];
 const townMarks = [];
 
@@ -2043,11 +2070,11 @@ const MAPS = [
       ...barn(20, -128, 223),
       ...silo(-2, -96),
       ...silo(7, -98),
-      ...scatter(40, 641, (rnd) => {
+      ...offRoute(scatter(40, 641, (rnd) => {
         const x = -60 + rnd() * 110;
         const z = -150 + rnd() * 70;
         return box(x, z, 1.7, 1.15, 1.3, 0xb9973f, rnd() * 3);
-      }),
+      })),
 
       /* ── the power station, east ──────────────────────────────── */
       ...ruinBlock(122, 46, 647),
@@ -2091,30 +2118,30 @@ const MAPS = [
           const a = Math.atan2(next[1] - rz, next[0] - rx) + Math.PI / 2;
           for (const side of [-1, 1]) {
             out.push(
-              box(x + Math.cos(a) * side * 7, z + Math.sin(a) * side * 7, 1.6, 0.3, 1.6, 0x55524a, a),
+              { ...box(x + Math.cos(a) * side * 12, z + Math.sin(a) * side * 12, 1.6, 0.3, 1.6, 0x55524a, a), clip: false },
             );
           }
         }
         return out;
       }),
       // wrecks and rubble out in the country between the stops
-      ...scatter(60, 691, (rnd) => {
+      ...offRoute(scatter(60, 691, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 60 + rnd() * 110;
         return box(Math.cos(a) * d, Math.sin(a) * d, 4.2, 1.4, 1.9, pickR([0x30292a, 0x2f3634, 0x3a2f28], rnd), rnd() * 3);
-      }),
+      })),
       // dead hedgerow and stumps, which is most of what is out there
-      ...scatter(90, 701, (rnd) => {
+      ...offRoute(scatter(90, 701, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 46 + rnd() * 130;
         return deadTree(Math.cos(a) * d, Math.sin(a) * d, 0.7 + rnd() * 0.8, rnd);
-      }).flat(),
-      ...scatter(70, 709, (rnd) => {
+      }).flat()),
+      ...offRoute(scatter(70, 709, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 40 + rnd() * 140;
         const sz = 0.5 + rnd() * 0.9;
         return box(Math.cos(a) * d, Math.sin(a) * d, sz, 0.28, sz * 0.8, pickOf(ROCK, rnd), rnd() * 3);
-      }),
+      })),
     ],
   },
 ];
