@@ -982,6 +982,9 @@ const busRun = await page.evaluate(async () => {
   const out = { stops: map.route.length, props: p.obstacles.length };
 
   // it has to actually move
+  // it waits 25 game seconds at a place, which this browser takes three
+  // real minutes to get through — send it on its way
+  p.bus.wait = 0;
   const startedAt = { x: p.bus.x, z: p.bus.z };
   const wallStop = Date.now() + 120000;
   while (Math.hypot(p.bus.x - startedAt.x, p.bus.z - startedAt.z) < 4 && Date.now() < wallStop) {
@@ -1087,6 +1090,39 @@ step(`  ${clearance.legs} legs, deepest overlap ${clearance.worst} units`);
  */
 if (clearance.worst > 0.4)
   note(`the bus drives ${clearance.worst} units into something at ${clearance.where}`);
+
+/*
+ * Firing must not knock you off the sights. Releasing the left button used to
+ * clear the aim as well as the trigger, so every shot dropped the zoom while
+ * the right button was still held.
+ */
+step("you can shoot without losing the sights")
+const shootAimed = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "forest";
+  p.resetGame();
+  p.beginPlay();
+  const rifle = p.WEAPONS.find((w) => w.id === "ak47");
+  p.game.slots = [{ id: "ak47", mag: rifle.mag, reserve: rifle.reserve }];
+  p.game.weapon = 0;
+
+  p.setAiming(true);
+  for (let i = 0; i < 40 && !p.aiming(); i++) await new Promise((r) => setTimeout(r, 100));
+  const aimedFirst = p.aiming();
+
+  // a left click, down and up, while the right button stays held
+  window.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerType: "mouse", bubbles: true }));
+  await new Promise((r) => setTimeout(r, 200));
+  window.dispatchEvent(new PointerEvent("pointerup", { button: 0, pointerType: "mouse", bubbles: true }));
+  await new Promise((r) => setTimeout(r, 400));
+
+  const out = { aimedFirst, stillHeld: p.aim.held, stillAiming: p.aiming() };
+  p.setAiming(false);
+  return out;
+});
+if (!shootAimed.aimedFirst) note("could not get on the sights at all");
+if (!shootAimed.stillHeld) note("firing dropped the aim while the right button was still held");
+if (!shootAimed.stillAiming) note("the sights came down after a shot");
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")

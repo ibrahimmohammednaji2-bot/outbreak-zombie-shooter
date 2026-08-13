@@ -1635,6 +1635,14 @@ const ROUTE = [
 ];
 
 /*
+ * Which of those points are places, as opposed to bends put in to get round a
+ * building. The bus waits at a place and drives straight through a bend — it
+ * was waiting at all thirteen, which is why it kept halting in open country
+ * for no reason anyone could see.
+ */
+const STOPS = new Set([0, 3, 6, 9, 11]);
+
+/*
  * Is this spot on the road? The bus is fifteen units long and turns, so
  * nothing solid may stand within about its own length of the centre line —
  * otherwise the ends of it sweep through whatever the middle missed. Used to
@@ -3519,7 +3527,7 @@ const BUS = {
   FLOOR: 1.05,
   H: 3.2,
   SPEED: 13,
-  WAIT: 6, // seconds at each stop
+  WAIT: 25, // seconds waiting at a place, so it is worth running for
 };
 
 const bus = { group: null, x: 0, z: 0, leg: 0, t: 0, wait: 0, riding: false, seat: null };
@@ -3615,7 +3623,7 @@ function updateBus(dt) {
     if (bus.t >= 1) {
       bus.t = 0;
       bus.leg = (bus.leg + 1) % route.length;
-      bus.wait = BUS.WAIT;
+      if (STOPS.has(bus.leg)) bus.wait = BUS.WAIT;
     }
   }
 
@@ -5656,9 +5664,20 @@ addEventListener("contextmenu", (e) => {
   if (game.running && !game.over) e.preventDefault();
 });
 
+/*
+ * Letting go of the trigger. Deliberately does NOT drop the sights: this is
+ * bound to releasing the left button, and clearing the aim there meant every
+ * shot knocked you off the sights while the right button was still held —
+ * which from where you are standing is "I cannot shoot while aiming".
+ */
 const releaseTrigger = () => {
   game.triggerHeld = false;
   game.queued = 0;
+};
+
+/** Everything up: for a lost focus, a cancelled gesture, a released lock. */
+const releaseAll = () => {
+  releaseTrigger();
   setAiming(false);
 };
 
@@ -5671,16 +5690,16 @@ addEventListener("pointerup", (e) => {
 // Every way a button release can go missing: the pointer leaving the window,
 // the tab losing focus, a cancelled gesture. Any of them would otherwise
 // leave the gun firing by itself.
-addEventListener("pointercancel", releaseTrigger);
-addEventListener("blur", releaseTrigger);
-addEventListener("visibilitychange", () => document.hidden && releaseTrigger());
+addEventListener("pointercancel", releaseAll);
+addEventListener("blur", releaseAll);
+addEventListener("visibilitychange", () => document.hidden && releaseAll());
 document.addEventListener("pointerlockchange", () => {
-  if (!document.pointerLockElement) releaseTrigger();
+  if (!document.pointerLockElement) releaseAll();
 });
 // self-heal: a mouse move with no buttons down means nothing is held
 addEventListener("pointermove", (e) => {
   if (e.pointerType !== "mouse" || e.buttons !== 0) return;
-  if (game.triggerHeld || aim.held) releaseTrigger(); // nothing is down after all
+  if (game.triggerHeld || aim.held) releaseAll(); // nothing is down after all
 });
 
 addEventListener("blur", () => {
