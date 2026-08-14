@@ -1106,21 +1106,37 @@ const shootAimed = await page.evaluate(async () => {
   p.game.slots = [{ id: "ak47", mag: rifle.mag, reserve: rifle.reserve }];
   p.game.weapon = 0;
 
-  p.setAiming(true);
+  /*
+   * The real sequence, through the real handlers: hold the right button, then
+   * click the left one. Calling the aim function directly — which is what this
+   * used to do — skips the handler that has the bug in it.
+   */
+  const down = (button, buttons) =>
+    window.dispatchEvent(new PointerEvent("pointerdown", { button, buttons, pointerType: "mouse", bubbles: true }));
+  const up = (button, buttons) =>
+    window.dispatchEvent(new PointerEvent("pointerup", { button, buttons, pointerType: "mouse", bubbles: true }));
+
+  down(2, 2); // right button down, and held from here on
   for (let i = 0; i < 40 && !p.aiming(); i++) await new Promise((r) => setTimeout(r, 100));
   const aimedFirst = p.aiming();
 
-  // a left click, down and up, while the right button stays held
-  window.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerType: "mouse", bubbles: true }));
-  await new Promise((r) => setTimeout(r, 200));
-  window.dispatchEvent(new PointerEvent("pointerup", { button: 0, pointerType: "mouse", bubbles: true }));
+  const magBefore = p.game.slots[0].mag;
+  down(0, 3); // left click while the right is still down
+  await new Promise((r) => setTimeout(r, 400));
+  up(0, 2); // let go of the left; the right is still down
   await new Promise((r) => setTimeout(r, 400));
 
-  const out = { aimedFirst, stillHeld: p.aim.held, stillAiming: p.aiming() };
-  p.setAiming(false);
+  const out = {
+    aimedFirst,
+    fired: magBefore - p.game.slots[0].mag,
+    stillHeld: p.aim.held,
+    stillAiming: p.aiming(),
+  };
+  up(2, 0);
   return out;
 });
-if (!shootAimed.aimedFirst) note("could not get on the sights at all");
+if (!shootAimed.aimedFirst) note("holding the right button did not raise the sights");
+if (!shootAimed.fired) note("clicking the left button while aiming fired nothing");
 if (!shootAimed.stillHeld) note("firing dropped the aim while the right button was still held");
 if (!shootAimed.stillAiming) note("the sights came down after a shot");
 
