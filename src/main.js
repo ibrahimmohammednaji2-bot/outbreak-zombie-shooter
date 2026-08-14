@@ -3527,8 +3527,30 @@ const BUS = {
   FLOOR: 1.05,
   H: 3.2,
   SPEED: 13,
-  WAIT: 25, // seconds waiting at a place, so it is worth running for
+  WAIT: 120, // two minutes at each place — long enough to do something
 };
+
+/*
+ * Where the near side is solid, where the far side is, and what is missing
+ * from it. Measured along the bus from back (-D) to front (+D).
+ *
+ *   near side: solid but for a doorway you get on through
+ *   far side:  solid but for two holes something tore in it
+ */
+const BUS_DOOR = [2.6, 5.4];
+const BUS_HOLES = [[-5.6, -2.8], [0.2, 2.6]];
+const gapsToSolid = (gaps) => {
+  const out = [];
+  let at = -BUS.D;
+  for (const [from, to] of gaps) {
+    if (from > at) out.push([at, from]);
+    at = to;
+  }
+  if (at < BUS.D) out.push([at, BUS.D]);
+  return out;
+};
+const BUS_NEAR_SOLID = gapsToSolid([BUS_DOOR]);
+const BUS_FAR_SOLID = gapsToSolid(BUS_HOLES);
 
 const bus = { group: null, x: 0, z: 0, leg: 0, t: 0, wait: 0, riding: false, seat: null };
 
@@ -3540,7 +3562,7 @@ function buildBus() {
   if (!mapDef?.route) return;
 
   const g = new THREE.Group();
-  const body = new THREE.MeshLambertMaterial({ color: 0xc9a227 });
+  const body = new THREE.MeshLambertMaterial({ color: 0x8b9095 }); // gray
   const glass = new THREE.MeshLambertMaterial({ color: 0x2a3a44, emissive: 0x0e1a20 });
   const dark = new THREE.MeshLambertMaterial({ color: 0x2a2622 });
 
@@ -3554,8 +3576,23 @@ function buildBus() {
   };
 
   panel(BUS.W * 2, 0.3, BUS.D * 2, 0, BUS.FLOOR, 0); // the deck you stand on
-  panel(0.25, BUS.H, BUS.D * 2, -BUS.W, BUS.FLOOR + BUS.H / 2, 0); // sides
-  panel(0.25, BUS.H, BUS.D * 2, BUS.W, BUS.FLOOR + BUS.H / 2, 0);
+  /*
+   * The near side is built in three pieces around a doorway, and the far side
+   * around two torn holes. You get on through the door; they come through the
+   * holes. Both are real gaps in both the model and the collision, so what you
+   * can see through is what you can walk through.
+   */
+  for (const [from, to] of BUS_NEAR_SOLID) {
+    panel(0.25, BUS.H, to - from, BUS.W, BUS.FLOOR + BUS.H / 2, (from + to) / 2);
+  }
+  for (const [from, to] of BUS_FAR_SOLID) {
+    panel(0.25, BUS.H, to - from, -BUS.W, BUS.FLOOR + BUS.H / 2, (from + to) / 2);
+  }
+  // the torn metal round each hole, so it reads as damage and not a window
+  for (const [from, to] of BUS_HOLES) {
+    panel(0.3, 0.25, to - from, -BUS.W, BUS.FLOOR + 0.15, (from + to) / 2, dark);
+    panel(0.3, 0.25, to - from, -BUS.W, BUS.FLOOR + BUS.H - 0.15, (from + to) / 2, dark);
+  }
   panel(BUS.W * 2, BUS.H, 0.25, 0, BUS.FLOOR + BUS.H / 2, -BUS.D); // back
   panel(BUS.W * 2, 1.2, 0.25, 0, BUS.FLOOR + BUS.H - 0.6, BUS.D); // front, open below
   panel(BUS.W * 2 - 0.4, 0.25, BUS.D * 2 - 0.4, 0, BUS.FLOOR + BUS.H, 0); // roof
@@ -3717,6 +3754,53 @@ function busCollide(pos, radius) {
  * in the bus's own frame, where the walls are axis-aligned, then rotated back
  * out — the same trick the static obstacle test uses, except the box moves.
  */
+/*
+ * The bus seen from outside: something you walk round, not through.
+ *
+ * Pushes you out to the nearest side, which also stops you walking underneath
+ * it — below deck height the whole shape is solid. The doorway is the one
+ * place that lets you in, and only at deck height, so you step up into it
+ * rather than strolling through the bodywork.
+ */
+function busBlockOutside(pos, radius) {
+  if (!bus.group || bus.riding) return;
+  if (pos.y > BUS.FLOOR + BUS.H) return; // over the roof
+
+  const l = busLocal(pos.x, pos.z);
+  const hw = BUS.W + radius;
+  const hd = BUS.D + radius;
+  if (Math.abs(l.x) > hw || Math.abs(l.z) > hd) return;
+
+  /*
+   * Standing on the deck makes you a passenger, whether or not the ride has
+   * been registered yet. Without this, the frame you step aboard — before
+   * bus.riding is set — you are read as somebody walking into the side of a
+   * bus and thrown out of it.
+   */
+  if (
+    pos.y > BUS.FLOOR - 0.3 &&
+    Math.abs(l.x) < BUS.W &&
+    Math.abs(l.z) < BUS.D
+  ) return;
+
+  // the doorway, at deck height: this is how you get on
+  const atDoor =
+    l.x > 0 && l.z > BUS_DOOR[0] && l.z < BUS_DOOR[1] && pos.y > BUS.FLOOR - 0.5;
+  if (atDoor) return;
+
+  // out the nearest way
+  const outX = hw - Math.abs(l.x);
+  const outZ = hd - Math.abs(l.z);
+  let dx = 0;
+  let dz = 0;
+  if (outX < outZ) dx = Math.sign(l.x || 1) * outX;
+  else dz = Math.sign(l.z || 1) * outZ;
+
+  const a = bus.group.rotation.y;
+  pos.x += dx * Math.cos(a) + dz * Math.sin(a);
+  pos.z += -dx * Math.sin(a) + dz * Math.cos(a);
+}
+
 function busPushOut(pos, radius) {
   if (!bus.group) return;
   if (pos.y < BUS.FLOOR - 0.4 || pos.y > BUS.FLOOR + BUS.H) return;
@@ -3728,10 +3812,15 @@ function busPushOut(pos, radius) {
   // only for someone already aboard: it must never shove a passer-by
   if (Math.abs(l.x) > BUS.W || l.z < -BUS.D || l.z > BUS.D) return;
 
+  // a gap is not a wall: through the door, or through a hole, you go
+  const inGap = (gaps) => gaps.some(([a, b]) => l.z > a && l.z < b);
+  const nearOpen = inGap([BUS_DOOR]);
+  const farOpen = inGap(BUS_HOLES);
+
   let dx = 0;
   let dz = 0;
-  if (l.x > wallX) dx = wallX - l.x;
-  else if (l.x < -wallX) dx = -wallX - l.x;
+  if (l.x > wallX && !nearOpen) dx = wallX - l.x;
+  else if (l.x < -wallX && !farOpen) dx = -wallX - l.x;
   if (l.z < backZ) dz = backZ - l.z;
 
   if (!dx && !dz) return;
@@ -5011,6 +5100,7 @@ function movePlayer(dt) {
    * deck, which is the "it leaves you behind between the houses" case: you
    * were not left behind, you were pushed out of it.
    */
+  busBlockOutside(player.pos, PLAYER_R);
   if (bus.riding) {
     busPushOut(player.pos, PLAYER_R);
     // wherever you have walked to on the deck is where you are standing now
