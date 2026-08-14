@@ -1116,14 +1116,27 @@ const shootAimed = await page.evaluate(async () => {
   const up = (button, buttons) =>
     window.dispatchEvent(new PointerEvent("pointerup", { button, buttons, pointerType: "mouse", bubbles: true }));
 
+  /*
+   * A browser under pointer lock does not reliably deliver both the pointer
+   * and the mouse event for the same press, so the game listens for both and
+   * ignores the duplicate. Send both here too, in the order a browser does.
+   */
+  const mdown = (button, buttons) =>
+    window.dispatchEvent(new MouseEvent("mousedown", { button, buttons, bubbles: true }));
+  const mup = (button, buttons) =>
+    window.dispatchEvent(new MouseEvent("mouseup", { button, buttons, bubbles: true }));
+
   down(2, 2); // right button down, and held from here on
+  mdown(2, 2);
   for (let i = 0; i < 40 && !p.aiming(); i++) await new Promise((r) => setTimeout(r, 100));
   const aimedFirst = p.aiming();
 
   const magBefore = p.game.slots[0].mag;
   down(0, 3); // left click while the right is still down
+  mdown(0, 3);
   await new Promise((r) => setTimeout(r, 400));
   up(0, 2); // let go of the left; the right is still down
+  mup(0, 2);
   await new Promise((r) => setTimeout(r, 400));
 
   const out = {
@@ -1133,6 +1146,7 @@ const shootAimed = await page.evaluate(async () => {
     stillAiming: p.aiming(),
   };
   up(2, 0);
+  mup(2, 0);
   return out;
 });
 if (!shootAimed.aimedFirst) note("holding the right button did not raise the sights");

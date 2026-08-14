@@ -5739,15 +5739,45 @@ addEventListener("keyup", (e) => {
   if (e.code === "KeyW") isRunning = false; // let go of W and you drop to a walk
 });
 
-addEventListener("pointerdown", (e) => {
-  // on a tablet the FIRE button fires; a tap on the screen is for looking
+/*
+ * Which mouse buttons are down, as one fact rather than several.
+ *
+ * The trigger and the sights used to be separate flags set by separate
+ * handlers, and every combination of them was a chance for one button's events
+ * to clear the other's state — which is what stopped the gun firing while the
+ * right button was held. One set, written by every press and release, and the
+ * two flags derived from it. There is no arrangement of buttons that can leave
+ * them disagreeing now.
+ *
+ * Both pointer and mouse events are listened to because a browser under
+ * pointer lock does not reliably deliver both, and a missed press is a gun
+ * that will not fire.
+ */
+const heldButtons = new Set();
+
+function syncButtons() {
+  game.triggerHeld = heldButtons.has(0);
+  setAiming(heldButtons.has(2));
+}
+
+function buttonDown(e) {
   if (touchMode || e.pointerType === "touch") return;
   if (!game.running || game.over) return;
-  if (e.button === 2) return setAiming(true); // right button shoulders the gun
-  if (e.button !== 0) return;
-  game.triggerHeld = true;
-  game.queued++; // bank it now so the loop can never miss the click
-});
+  if (heldButtons.has(e.button)) return; // pointer and mouse both reported it
+  heldButtons.add(e.button);
+  if (e.button === 0) game.queued++; // bank it so the loop cannot miss a tap
+  syncButtons();
+}
+
+function buttonUp(e) {
+  if (touchMode || e.pointerType === "touch") return;
+  if (!heldButtons.delete(e.button)) return;
+  if (e.button === 0) game.queued = 0;
+  syncButtons();
+}
+
+addEventListener("pointerdown", buttonDown);
+addEventListener("mousedown", buttonDown);
 
 // otherwise the right button opens the browser's own menu over the game
 addEventListener("contextmenu", (e) => {
@@ -5760,22 +5790,15 @@ addEventListener("contextmenu", (e) => {
  * shot knocked you off the sights while the right button was still held —
  * which from where you are standing is "I cannot shoot while aiming".
  */
-const releaseTrigger = () => {
-  game.triggerHeld = false;
-  game.queued = 0;
-};
-
 /** Everything up: for a lost focus, a cancelled gesture, a released lock. */
 const releaseAll = () => {
-  releaseTrigger();
-  setAiming(false);
+  heldButtons.clear();
+  game.queued = 0;
+  syncButtons();
 };
 
-addEventListener("pointerup", (e) => {
-  if (touchMode || e.pointerType === "touch") return;
-  if (e.button === 0) releaseTrigger();
-  if (e.button === 2) setAiming(false);
-});
+addEventListener("pointerup", buttonUp);
+addEventListener("mouseup", buttonUp);
 
 // Every way a button release can go missing: the pointer leaving the window,
 // the tab losing focus, a cancelled gesture. Any of them would otherwise
@@ -5787,10 +5810,12 @@ document.addEventListener("pointerlockchange", () => {
   if (!document.pointerLockElement) releaseAll();
 });
 // self-heal: a mouse move with no buttons down means nothing is held
-addEventListener("pointermove", (e) => {
-  if (e.pointerType !== "mouse" || e.buttons !== 0) return;
-  if (game.triggerHeld || aim.held) releaseAll(); // nothing is down after all
-});
+/*
+ * Self-heal, for a release that never arrived. Deliberately not driven by
+ * pointermove's button field: under pointer lock that field is not dependable,
+ * and trusting it here is how a held right button could wipe the trigger.
+ * blur, a cancelled gesture and a released lock are the honest signals.
+ */
 
 addEventListener("blur", () => {
   game.triggerHeld = false;
