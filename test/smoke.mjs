@@ -1154,6 +1154,42 @@ if (!shootAimed.fired) note("clicking the left button while aiming fired nothing
 if (!shootAimed.stillHeld) note("firing dropped the aim while the right button was still held");
 if (!shootAimed.stillAiming) note("the sights came down after a shot");
 
+// ── the two things that make the road worth taking ──
+step("rares scale with difficulty, and the fog closes in off the road")
+const roadAndRares = await page.evaluate(async () => {
+  const p = window.__probe;
+  const out = {};
+
+  // roll a few thousand on easy and on insane and compare
+  const sample = (diffId) => {
+    p.game.diff = p.DIFFS.find((d) => d.id === diffId);
+    let rare = 0;
+    for (let i = 0; i < 4000; i++) if (p.rollKind() !== "walker") rare++;
+    return rare / 4000;
+  };
+  out.easy = +sample("easy").toFixed(3);
+  out.insane = +sample("insane").toFixed(3);
+  p.game.diff = p.DIFFS.find((d) => d.id === "normal");
+
+  // and the fog, on the road and well off it
+  p.game.mapId = "tranzit";
+  p.resetGame();
+  p.beginPlay();
+  const [rx, rz] = p.MAPS.find((m) => m.id === "tranzit").route[0];
+  p.player.pos.set(rx, 0, rz);
+  for (let i = 0; i < 40; i++) await new Promise((r) => setTimeout(r, 100));
+  out.onRoad = +p.scene.fog.density.toFixed(4);
+  p.player.pos.set(rx + 90, 0, rz + 90);
+  for (let i = 0; i < 60; i++) await new Promise((r) => setTimeout(r, 100));
+  out.offRoad = +p.scene.fog.density.toFixed(4);
+  return out;
+});
+step(`  rares ${(roadAndRares.easy * 100).toFixed(1)}% on easy, ${(roadAndRares.insane * 100).toFixed(1)}% on insane; fog ${roadAndRares.onRoad} on the road, ${roadAndRares.offRoad} off it`);
+if (!(roadAndRares.insane > roadAndRares.easy * 1.8))
+  note(`insane rolls ${roadAndRares.insane} rares against easy's ${roadAndRares.easy} — barely different`);
+if (!(roadAndRares.offRoad > roadAndRares.onRoad * 2))
+  note(`the fog off the road (${roadAndRares.offRoad}) is no thicker than on it (${roadAndRares.onRoad})`);
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

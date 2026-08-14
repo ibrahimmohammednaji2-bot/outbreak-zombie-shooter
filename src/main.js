@@ -825,10 +825,10 @@ addEventListener("resize", () => {
 // Each level scales four independent things, so "hard" is not just
 // "more health" — they hit harder, arrive sooner and move quicker.
 const DIFFICULTIES = [
-  { id: "easy", label: "EASY", blurb: "Fewer, slower, softer.", damage: 0.6, count: 0.7, speed: 0.85, health: 0.75, rate: 1.3, coins: 5 },
-  { id: "normal", label: "NORMAL", blurb: "The intended fight.", damage: 1, count: 1, speed: 1, health: 1, rate: 1, coins: 10 },
-  { id: "hard", label: "HARD", blurb: "Harder hits, bigger waves.", damage: 1.5, count: 1.35, speed: 1.15, health: 1.45, rate: 0.78, coins: 15 },
-  { id: "insane", label: "INSANE", blurb: "You will die.", damage: 2.2, count: 1.8, speed: 1.38, health: 2.1, rate: 0.55, coins: 25 },
+  { id: "easy", label: "EASY", blurb: "Fewer, slower, softer.", damage: 0.6, count: 0.7, speed: 0.85, health: 0.75, rate: 1.3, coins: 5, rarity: 0.6 },
+  { id: "normal", label: "NORMAL", blurb: "The intended fight.", damage: 1, count: 1, speed: 1, health: 1, rate: 1, coins: 10, rarity: 1 },
+  { id: "hard", label: "HARD", blurb: "Harder hits, bigger waves.", damage: 1.5, count: 1.35, speed: 1.15, health: 1.45, rate: 0.78, coins: 15, rarity: 1.8 },
+  { id: "insane", label: "INSANE", blurb: "You will die.", damage: 2.2, count: 1.8, speed: 1.38, health: 2.1, rate: 0.55, coins: 25, rarity: 3 },
 ];
 
 // ── maps ─────────────────────────────────────────────────────────
@@ -2828,12 +2828,19 @@ const ZOMBIE_TYPES = {
   walker:   { chance: 0,     hp: 100, speed: 1.75, dmg: 33,  scale: 1,    label: "a walker" },
 };
 
+/*
+ * The worse the night, the more of them are something other than a walker.
+ * Insane rolls a special three times as often as easy does, which is what
+ * separates a hard night from a long one: on easy you fight numbers, on insane
+ * you fight the roster.
+ */
 function rollKind() {
+  const rarity = game.diff.rarity ?? 1;
   const r = Math.random();
   let acc = 0;
   for (const [id, t] of Object.entries(ZOMBIE_TYPES)) {
     if (!t.chance) continue;
-    acc += t.chance;
+    acc += Math.min(t.chance * rarity, t.chance * 4);
     if (r < acc) return id;
   }
   return "walker";
@@ -3612,6 +3619,7 @@ function buildBus() {
 
   scene.add(g);
   bus.group = g;
+  fogNow = mapDef.fog ?? 0.01;
   bus.leg = 0;
   bus.t = 0;
   bus.wait = BUS.WAIT;
@@ -3622,6 +3630,45 @@ function buildBus() {
 }
 
 /** Where the bus is going, and how far along it is. */
+/*
+ * Off the road you cannot see.
+ *
+ * The bus exists because walking is meant to be a bad idea, and it is only a
+ * bad idea if the country between the stops is genuinely hard to cross. Near
+ * the road the air is clear; away from it the fog closes to a few paces. It
+ * eases rather than snapping, so stepping off the kerb is a decision you feel
+ * rather than a wall you hit.
+ */
+const FOG_CLEAR = 14; // within this of the road, the air is as the map intends
+const FOG_LOST = 60; // beyond this, it is as thick as it gets
+let fogNow = 0;
+
+function updateFog(dt) {
+  if (!scene.fog || !mapDef?.route) return;
+  const base = mapDef.fog ?? 0.01;
+  const thick = base * 6;
+
+  let near = Infinity;
+  for (let i = 0; i < mapDef.route.length; i++) {
+    const [ax, az] = mapDef.route[i];
+    const [bx, bz] = mapDef.route[(i + 1) % mapDef.route.length];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len2 = dx * dx + dz * dz || 1;
+    let t = ((player.pos.x - ax) * dx + (player.pos.z - az) * dz) / len2;
+    t = Math.max(0, Math.min(1, t));
+    near = Math.min(near, Math.hypot(player.pos.x - (ax + dx * t), player.pos.z - (az + dz * t)));
+  }
+
+  // riding is always clear: you are on the road by definition
+  const k = bus.riding
+    ? 0
+    : THREE.MathUtils.clamp((near - FOG_CLEAR) / (FOG_LOST - FOG_CLEAR), 0, 1);
+  const want = base + (thick - base) * k;
+  fogNow += (want - fogNow) * Math.min(1, dt * 1.5);
+  scene.fog.density = fogNow;
+}
+
 function updateBus(dt) {
   if (!bus.group || !mapDef?.route) return;
   const route = mapDef.route;
@@ -5596,6 +5643,7 @@ function animate() {
     updateDrops(dt);
     if (!game.dm) {
       updateBus(dt);
+      updateFog(dt);
       updateParts(dt);
       updateLeroy(dt);
       if (turbineSockets[0]?.spin) turbineSockets[0].spin.rotation.y += dt * 9;
@@ -7828,6 +7876,8 @@ if (import.meta.env.DEV) {
     scene,
     LIGHT_BUDGET,
     lavaPools,
+    rollKind,
+    DIFFS: DIFFICULTIES,
     bus,
     BUS,
     busCollide,
