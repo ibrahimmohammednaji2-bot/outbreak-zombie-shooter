@@ -1605,6 +1605,8 @@ const townLava = [];
 const transitBoxes = [];
 const transitMarks = [];
 const transitLava = [];
+const farmLava = [];
+const buriedLava = [];
 
 /*
  * The bus route: five stops with a bend between each, in the order the bus
@@ -1946,6 +1948,33 @@ const MAPS = [
 
       // ── the church, at the top of the street ──
       ...chapel(-4, -64, 101),
+
+      /*
+       * The hedge maze. A grid of hedges with gaps cut through it, laid out
+       * from a fixed seed so it is the same every game and can be learned.
+       * Deliberately not a perfect maze — a perfect maze is a chore to walk.
+       * There is more than one way through, and the hedges are tall enough to
+       * lose your bearings behind and thin enough to hear through.
+       */
+      ...scatter(1, 909, (rnd) => {
+        const out = [];
+        const CX = 46;
+        const CZ = -18;
+        const CELL = 6;
+        const N = 7;
+        for (let i = 0; i <= N; i++) {
+          for (let j = 0; j < N; j++) {
+            const x = CX + (i - N / 2) * CELL;
+            const z = CZ + (j - N / 2) * CELL + CELL / 2;
+            // a wall along z, unless the dice open it
+            if (rnd() > 0.38) out.push(box(x, z, 0.7, 3.1, CELL, 0x2f4a2b));
+            const x2 = CX + (j - N / 2) * CELL + CELL / 2;
+            const z2 = CZ + (i - N / 2) * CELL;
+            if (rnd() > 0.38) out.push(box(x2, z2, CELL, 3.1, 0.7, 0x2f4a2b));
+          }
+        }
+        return out;
+      }).flat(),
 
       // ── the graveyard between the church and the town ──
       ...scatter(26, 113, (rnd) => {
