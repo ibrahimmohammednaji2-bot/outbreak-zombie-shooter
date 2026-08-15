@@ -1976,6 +1976,34 @@ const MAPS = [
         return out;
       }).flat(),
 
+      /*
+       * The mansion, up past the maze. Two floors and a portico, and the only
+       * building here nobody built out of packing timber — whoever owned this
+       * town lived in it. What is inside it is not a zombie.
+       */
+      ...house(46, -52, 811),
+      ...scatter(1, 813, () => {
+        const out = [];
+        // the portico across the front, on four columns
+        for (const dx of [-7, -2.4, 2.4, 7]) {
+          out.push(cyl(46 + dx, -34, 0.55, 0.7, 6.2, 0xb0a894));
+        }
+        out.push({ ...box(46, -34, 17, 0.8, 4.4, 0xb0a894), y: 6.2, clip: false });
+        out.push({ ...box(46, -34, 18, 0.6, 5.2, 0x8d8272), y: 7, clip: false });
+        // steps up to it
+        for (let i = 0; i < 4; i++) {
+          out.push(box(46, -31.4 + i * 0.9, 13 - i, 0.28 * (4 - i), 1, 0xb0a894));
+        }
+        return out;
+      }).flat(),
+      // the wall round its grounds, mostly standing
+      ...scatter(40, 817, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 26 + rnd() * 4;
+        if (rnd() > 0.78) return [];
+        return box(46 + Math.cos(a) * d, -52 + Math.sin(a) * d, 3, 2.2, 0.6, 0x8d8272, a + Math.PI / 2);
+      }).flat(),
+
       // ── the graveyard between the church and the town ──
       ...scatter(26, 113, (rnd) => {
         const gx = -4 + (rnd() - 0.5) * 34;
@@ -2142,6 +2170,60 @@ const MAPS = [
       ...lavaCrack(transitLava, -18, -22, 6, 20, 0.2).flat(),
       ...lavaCrack(transitLava, 22, 4, 6, 18, -0.15).flat(),
       ...lavaCrack(transitLava, 0, -38, 26, 5, 0).flat(),
+
+      /* ── the tunnel: a long covered run you can shelter in ────── */
+      ...timbering(-150, 78, -104, 96, 14),
+      ...scatter(18, 721, (rnd) => {
+        const k = rnd();
+        const x = -150 + k * 46;
+        const z = 78 + k * 18;
+        return box(x, z + (rnd() - 0.5) * 5, 1.4 + rnd(), 0.5, 1.2, 0x5f574e, rnd() * 3);
+      }),
+
+      /* ── the cornfield: easy to get into, hard to see out of ──── */
+      ...scatter(340, 733, (rnd) => {
+        const x = 62 + (rnd() - 0.5) * 74;
+        const z = 104 + (rnd() - 0.5) * 62;
+        if (onRoute(x, z)) return [];
+        // stalks: thin, tall, and thick enough together to lose a road in
+        return box(x, z, 0.34, 2.9 + rnd() * 0.7, 0.34, rnd() > 0.5 ? 0x6e6a2a : 0x5a5822, rnd() * 3);
+      }).flat(),
+
+      /* ── the hunter's cabin, off on its own in the trees ───────── */
+      ...house(-132, -118, 743),
+      ...scatter(26, 751, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 22 + rnd() * 26;
+        return deadTree(-132 + Math.cos(a) * d, -118 + Math.sin(a) * d, 0.8 + rnd() * 0.7, rnd);
+      }).flat(),
+
+      /* ── the prototype: the oldest building out here, and the
+           only one still standing square ──────────────────────────── */
+      ...ruinBlock(140, -128, 757),
+      ...scatter(16, 761, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 16 + rnd() * 22;
+        const sz = 1.2 + rnd() * 1.8;
+        return box(140 + Math.cos(a) * d, -128 + Math.sin(a) * d, sz * 2, sz * 0.6, sz * 1.6, 0x5a5044, rnd() * 3);
+      }),
+
+      /* ── the pylon: visible from most of the map, which is the
+           point of it — something to steer by in the fog ─────────── */
+      ...scatter(1, 769, () => {
+        const X = -4;
+        const Z = -168;
+        const out = [];
+        for (const [sx, sz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
+          out.push({ ...box(X + sx, Z + sz, 0.6, 34, 0.6, 0x6b6d72), tilt: 0.06, clip: false });
+        }
+        for (let i = 1; i <= 6; i++) {
+          const y = i * 5;
+          out.push({ ...box(X, Z, 9, 0.4, 0.5, 0x6b6d72), y, clip: false });
+          out.push({ ...box(X, Z, 0.5, 0.4, 9, 0x6b6d72), y, clip: false });
+        }
+        out.push({ ...box(X, Z, 13, 0.5, 0.6, 0x8d8272), y: 33, clip: false });
+        return out;
+      }).flat(),
 
       /* ── the road that joins the five, and what lines it ──────── */
       ...ROUTE.flatMap(([rx, rz], i) => {
@@ -2409,6 +2491,7 @@ function buildMap(def) {
 
   placePerkMachines();
   buildBus();
+  spawnGhosts();
   buildGrid(); // everything is placed — index it for fast lookups
 }
 
@@ -3905,6 +3988,91 @@ function busPushOut(pos, radius) {
   const a = bus.group.rotation.y;
   pos.x += dx * Math.cos(a) + dz * Math.sin(a);
   pos.z += -dx * Math.sin(a) + dz * Math.cos(a);
+}
+
+/* ── the mansion ghosts ──────────────────────────────────────── */
+
+/*
+ * What is in the mansion is not a zombie and is not fought.
+ *
+ * A ghost drifts at you and takes points when it reaches you, and it cannot be
+ * shot — the only answer is to leave. That is the whole idea of the place: a
+ * room full of money you can only stay in for so long. They keep to the
+ * grounds, so the rest of the map is unaffected by them.
+ */
+const GHOST_HOME = { x: 46, z: -52, r: 30 };
+const GHOST_STEAL = 60; // points per touch
+const ghosts = [];
+
+function spawnGhosts() {
+  for (const g of ghosts) scene.remove(g.group);
+  ghosts.length = 0;
+  if (game.mapId !== "buried") return;
+
+  for (let i = 0; i < 3; i++) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xbfe6ff, transparent: true, opacity: 0.32, depthWrite: false,
+    });
+    const body = new THREE.Mesh(UNIT_CYL, mat);
+    body.scale.set(0.9, 2.2, 0.9);
+    body.position.y = 1.1;
+    group.add(body);
+    const head = new THREE.Mesh(UNIT_BOX, mat);
+    head.scale.set(0.7, 0.7, 0.7);
+    head.position.y = 2.5;
+    group.add(head);
+
+    const a = (i / 3) * Math.PI * 2;
+    group.position.set(GHOST_HOME.x + Math.cos(a) * 12, 0, GHOST_HOME.z + Math.sin(a) * 12);
+    scene.add(group);
+    ghosts.push({ group, mat, cd: 0, phase: Math.random() * 6 });
+  }
+}
+
+function updateGhosts(dt) {
+  if (!ghosts.length) return;
+  const inHouse =
+    Math.hypot(player.pos.x - GHOST_HOME.x, player.pos.z - GHOST_HOME.z) < GHOST_HOME.r;
+
+  for (const g of ghosts) {
+    g.phase += dt;
+    g.cd -= dt;
+    const p = g.group.position;
+
+    if (inHouse && player.alive) {
+      // drift at you, through anything: they are not solid and nor is the wall
+      const dx = player.pos.x - p.x;
+      const dz = player.pos.z - p.z;
+      const d = Math.hypot(dx, dz) || 1;
+      p.x += (dx / d) * 2.6 * dt;
+      p.z += (dz / d) * 2.6 * dt;
+
+      if (d < 1.6 && g.cd <= 0) {
+        g.cd = 2.5;
+        const taken = Math.min(game.points, GHOST_STEAL);
+        game.points -= taken;
+        sfx.hurt();
+        ui.vignette.style.opacity = "0.4";
+        setTimeout(() => (ui.vignette.style.opacity = "0"), 160);
+        toast(taken ? `-${taken} POINTS` : "NOTHING LEFT TO TAKE");
+        syncHud();
+      }
+    } else {
+      // drift back home and wait
+      const hx = GHOST_HOME.x - p.x;
+      const hz = GHOST_HOME.z - p.z;
+      const d = Math.hypot(hx, hz);
+      if (d > 12) {
+        p.x += (hx / d) * 2 * dt;
+        p.z += (hz / d) * 2 * dt;
+      }
+    }
+
+    p.y = 0.3 + Math.sin(g.phase * 1.6) * 0.35;
+    g.group.rotation.y = g.phase * 0.6;
+    g.mat.opacity = inHouse ? 0.42 : 0.16;
+  }
 }
 
 const spotScratch = new THREE.Vector3();
@@ -5673,6 +5841,7 @@ function animate() {
     if (!game.dm) {
       updateBus(dt);
       updateFog(dt);
+      updateGhosts(dt);
       updateParts(dt);
       updateLeroy(dt);
       if (turbineSockets[0]?.spin) turbineSockets[0].spin.rotation.y += dt * 9;
