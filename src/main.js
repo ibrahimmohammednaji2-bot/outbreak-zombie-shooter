@@ -6459,7 +6459,8 @@ function redeem() {
     grantUnlimited();
     renderShopButton();
     renderCodeBox();
-    codeMessage(`ALL ${n} SKINS UNLOCKED`, true);
+    // it grants tokens too, and said nothing about them, so nobody knew
+    codeMessage(`ALL ${n} SKINS UNLOCKED · UNLIMITED TOKENS`, true);
     sfx.unlock();
     if (!$("skins").classList.contains("hidden")) renderStore();
   } else {
@@ -8128,6 +8129,8 @@ if (import.meta.env.DEV) {
     scene,
     LIGHT_BUDGET,
     lavaPools,
+    REDEEM_CODE,
+    redeem,
     rollKind,
     DIFFS: DIFFICULTIES,
     bus,

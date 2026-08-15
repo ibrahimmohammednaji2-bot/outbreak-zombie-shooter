@@ -1190,6 +1190,31 @@ if (!(roadAndRares.insane > roadAndRares.easy * 1.8))
 if (!(roadAndRares.offRoad > roadAndRares.onRoad * 2))
   note(`the fog off the road (${roadAndRares.offRoad}) is no thicker than on it (${roadAndRares.onRoad})`);
 
+// ── the redeem code has to do both halves of what it claims ──
+step("the code unlocks every skin and grants unlimited tokens")
+const code = await page.evaluate(() => {
+  const p = window.__probe;
+  p.shopState.unlimited = false;
+  p.toLobby();
+  const box = document.getElementById("code-box");
+  const input = box.querySelector("#code-input");
+  if (!input) return { error: "no code box on the main screen" };
+  input.value = p.REDEEM_CODE;
+  p.redeem();
+  return {
+    unlimited: p.shopState.unlimited,
+    codeOn: p.wallet.code.active === true,
+    message: document.getElementById("code-msg")?.textContent ?? "",
+  };
+});
+if (code.error) note(code.error);
+else {
+  step(`  "${code.message}"`);
+  if (!code.codeOn) note("the code did not unlock the skins");
+  if (!code.unlimited) note("the code did not grant unlimited tokens");
+  if (!/TOKEN/i.test(code.message)) note("the code says nothing about the tokens it grants");
+}
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {
