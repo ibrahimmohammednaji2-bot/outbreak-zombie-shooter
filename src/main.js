@@ -1936,6 +1936,60 @@ const MAPS = [
       // ── the saloon: two floors, the perks, and the box upstairs ──
       ...house(30, 0, 401, townBoxes, townMarks),
 
+      /*
+       * The town proper, each building the thing it is rather than a
+       * storefront with a different seed. The general store is where you come
+       * in; the jail holds him; the saloon is the biggest room in town; the
+       * courthouse is the only stone one, because the county paid for it.
+       */
+      ...storefront(-8, 62, 18, 14, 301, Math.PI), // general store — the way in
+      ...storefront(-46, 34, 13, 12, 307, Math.PI / 2), // candy shop
+      ...storefront(44, 18, 15, 13, 311, -Math.PI / 2), // gunsmith
+      ...storefront(-44, -6, 14, 12, 313, Math.PI / 2), // rare books
+
+      // the jail: stone, small windows, and bars where a window should be
+      ...scatter(1, 317, () => {
+        const X = 40;
+        const Z = -8;
+        const out = [
+          box(X, Z + 6, 12, 3.6, 0.6, 0x8d8272),
+          box(X, Z - 6, 12, 3.6, 0.6, 0x8d8272),
+          box(X - 6, Z, 0.6, 3.6, 12, 0x8d8272),
+          box(X + 6, Z, 0.6, 3.6, 12, 0x8d8272),
+        ];
+        for (let i = 0; i < 5; i++) out.push(box(X - 2 + i, Z + 6, 0.16, 1.6, 0.7, 0x4a4a4a, 0, 1.4));
+        out.push({ ...box(X, Z, 12.6, 0.4, 12.6, 0x6b5233), y: 3.6, clip: false });
+        return out;
+      }).flat(),
+
+      // the courthouse: stone, a portico, and steps the town could be
+      // addressed from
+      ...house(-6, -22, 331),
+      ...scatter(1, 337, () => {
+        const out = [];
+        for (const dx of [-6, -2, 2, 6]) out.push(cyl(-6 + dx, -6, 0.5, 0.6, 5.4, 0x8d8272));
+        out.push({ ...box(-6, -6, 15, 0.7, 4, 0x8d8272), y: 5.4, clip: false });
+        for (let i = 0; i < 3; i++) out.push(box(-6, -3.6 + i * 0.9, 12 - i, 0.26 * (3 - i), 1, 0x8d8272));
+        return out;
+      }).flat(),
+
+      /*
+       * The fountains. Dry, cracked, and the only round things in a town built
+       * entirely out of straight lines — which is why they read as landmarks
+       * in the maze even before you know what they are for.
+       */
+      ...scatter(1, 341, () => {
+        const out = [];
+        for (const [fx, fz] of [[46, -34], [30, -6], [62, -6]]) {
+          for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            out.push(box(fx + Math.cos(a) * 2.6, fz + Math.sin(a) * 2.6, 1.5, 0.8, 0.6, 0x8d8272, -a));
+          }
+          out.push(cyl(fx, fz, 0.5, 0.8, 2.2, 0xb0a894));
+        }
+        return out;
+      }).flat(),
+
       // ── the west side of the street ──
       ...storefront(-24, 26, 15, 12, 11, Math.PI / 2), // general store
       ...storefront(-24, 4, 14, 13, 23, Math.PI / 2), // bank
