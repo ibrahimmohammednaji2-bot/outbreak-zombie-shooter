@@ -99,23 +99,6 @@ const BOX_COST = 950;
 // the mystery box upstairs.
 const WEAPONS = [
   {
-    id: "pistol",
-    name: "Pistol",
-    damage: 34,
-    headMult: 3,
-    rpm: 0.26,
-    mag: 12,
-    reserve: 90,
-    pellets: 1,
-    spread: 0.008,
-    auto: false,
-    reload: 1.1,
-    recoil: 0.055,
-    pickup: 6,
-    volume: 0.5,
-    tone: 780,
-  },
-  {
     // Damage is worked out at the moment it lands: always exactly enough
     // that wave N takes N hits.
     id: "knife",
@@ -135,149 +118,8 @@ const WEAPONS = [
     volume: 0.3,
     tone: 240,
   },
-  // ── submachine guns ──
-  {
-    id: "mp5",
-    name: "MP5",
-    damage: 25,
-    headMult: 2.5,
-    rpm: 0.075,
-    mag: 30,
-    reserve: 210,
-    pellets: 1,
-    spread: 0.018,
-    auto: true,
-    reload: 1.5,
-    recoil: 0.028,
-    pickup: 16,
-    volume: 0.42,
-    tone: 640,
-  },
-  {
-    id: "vector",
-    name: "Vector",
-    damage: 18,
-    headMult: 2.5,
-    rpm: 0.049,
-    mag: 25,
-    reserve: 225,
-    pellets: 1,
-    spread: 0.022,
-    auto: true,
-    reload: 1.4,
-    recoil: 0.019,
-    pickup: 20,
-    volume: 0.38,
-    tone: 700,
-  },
-  {
-    id: "uzi",
-    name: "Uzi",
-    damage: 20,
-    headMult: 2.5,
-    rpm: 0.058,
-    mag: 32,
-    reserve: 224,
-    pellets: 1,
-    spread: 0.027,
-    auto: true,
-    reload: 1.6,
-    recoil: 0.024,
-    pickup: 18,
-    volume: 0.4,
-    tone: 610,
-  },
 
-  // ── assault rifles ──
-  {
-    id: "ak47",
-    name: "AK-47",
-    damage: 38,
-    headMult: 3,
-    rpm: 0.1,
-    mag: 30,
-    reserve: 210,
-    pellets: 1,
-    spread: 0.017,
-    auto: true,
-    reload: 1.9,
-    recoil: 0.05,
-    pickup: 14,
-    volume: 0.55,
-    tone: 480,
-  },
-  {
-    id: "m4",
-    name: "M4",
-    damage: 31,
-    headMult: 3,
-    rpm: 0.084,
-    mag: 30,
-    reserve: 210,
-    pellets: 1,
-    spread: 0.013,
-    auto: true,
-    reload: 1.7,
-    recoil: 0.033,
-    pickup: 15,
-    volume: 0.5,
-    tone: 560,
-  },
-  {
-    id: "scar",
-    name: "SCAR-H",
-    damage: 48,
-    headMult: 3,
-    rpm: 0.13,
-    mag: 20,
-    reserve: 160,
-    pellets: 1,
-    spread: 0.012,
-    auto: true,
-    reload: 2,
-    recoil: 0.062,
-    pickup: 11,
-    volume: 0.6,
-    tone: 440,
-  },
 
-  // ── shotguns ──
-  {
-    id: "shotgun",
-    name: "Shotgun",
-    damage: 19,
-    headMult: 2,
-    rpm: 0.78,
-    mag: 6,
-    reserve: 42,
-    pellets: 9,
-    spread: 0.075,
-    auto: false,
-    reload: 2.2,
-    recoil: 0.13,
-    pickup: 4,
-    volume: 0.75,
-    tone: 300,
-  },
-  {
-    // Two barrels, both of them at once, and then a long wait. Off the wall
-    // for 500 — cheap, brutal up close, useless past a room's length.
-    id: "dbarrel",
-    name: "Double Barrel",
-    damage: 27,
-    headMult: 2,
-    rpm: 0.55,
-    mag: 2,
-    reserve: 28,
-    pellets: 12,
-    spread: 0.105,
-    auto: false,
-    reload: 2.4,
-    recoil: 0.22,
-    pickup: 4,
-    volume: 0.9,
-    tone: 240,
-  },
   {
     // Built, not bought. A wall of moving air that shreds whatever is close
     // and nothing that is not, and it has to be let go of before it cooks.
@@ -298,112 +140,8 @@ const WEAPONS = [
     tone: 140,
     built: true,
   },
-  {
-    id: "auto12",
-    name: "Auto Shotgun",
-    damage: 14,
-    headMult: 2,
-    rpm: 0.29,
-    mag: 8,
-    reserve: 48,
-    pellets: 8,
-    spread: 0.086,
-    auto: true,
-    reload: 2.6,
-    recoil: 0.1,
-    pickup: 4,
-    volume: 0.7,
-    tone: 330,
-  },
 
-  // ── precision ──
-  {
-    id: "magnum",
-    name: "Magnum",
-    damage: 90,
-    headMult: 2.6,
-    rpm: 0.5,
-    mag: 6,
-    reserve: 42,
-    pellets: 1,
-    spread: 0.01,
-    auto: false,
-    reload: 2.2,
-    recoil: 0.16,
-    pickup: 4,
-    volume: 0.78,
-    tone: 420,
-  },
-  {
-    id: "sniper",
-    name: "Sniper",
-    damage: 190,
-    headMult: 3,
-    rpm: 1.2,
-    mag: 5,
-    reserve: 35,
-    pellets: 1,
-    spread: 0.002,
-    auto: false,
-    reload: 2.6,
-    recoil: 0.22,
-    pickup: 3,
-    volume: 0.85,
-    tone: 260,
-  },
 
-  // ── light machine guns ──
-  {
-    id: "rpd",
-    name: "RPD",
-    damage: 33,
-    headMult: 2.5,
-    rpm: 0.088,
-    mag: 100,
-    reserve: 300,
-    pellets: 1,
-    spread: 0.029,
-    auto: true,
-    reload: 4.2,
-    recoil: 0.042,
-    pickup: 24,
-    volume: 0.62,
-    tone: 400,
-  },
-  {
-    id: "dingo",
-    name: "Dingo",
-    damage: 36,
-    headMult: 2.5,
-    rpm: 0.105,
-    mag: 75,
-    reserve: 300,
-    pellets: 1,
-    spread: 0.023,
-    auto: true,
-    reload: 3.8,
-    recoil: 0.046,
-    pickup: 22,
-    volume: 0.6,
-    tone: 430,
-  },
-  {
-    id: "mg42",
-    name: "MG-42",
-    damage: 29,
-    headMult: 2.5,
-    rpm: 0.062,
-    mag: 125,
-    reserve: 375,
-    pellets: 1,
-    spread: 0.034,
-    auto: true,
-    reload: 5,
-    recoil: 0.038,
-    pickup: 30,
-    volume: 0.66,
-    tone: 380,
-  },
 
   // ── launchers ──
   {
@@ -425,43 +163,6 @@ const WEAPONS = [
     projectile: { speed: 44, gravity: 3, radius: 9, damage: 320, colour: 0x8a7a6a },
   },
 
-  // ── grenade launchers ──
-  {
-    id: "m32",
-    name: "M32 Launcher",
-    damage: 30,
-    headMult: 1,
-    rpm: 0.7,
-    mag: 6,
-    reserve: 24,
-    pellets: 1,
-    spread: 0.009,
-    auto: false,
-    reload: 3.6,
-    recoil: 0.18,
-    pickup: 2,
-    volume: 0.78,
-    tone: 240,
-    projectile: { speed: 28, gravity: 14, radius: 7, damage: 210, colour: 0x4a5a3a },
-  },
-  {
-    id: "gl40",
-    name: "GL-40",
-    damage: 30,
-    headMult: 1,
-    rpm: 1.1,
-    mag: 1,
-    reserve: 14,
-    pellets: 1,
-    spread: 0.007,
-    auto: false,
-    reload: 2.4,
-    recoil: 0.2,
-    pickup: 2,
-    volume: 0.8,
-    tone: 220,
-    projectile: { speed: 32, gravity: 12, radius: 8, damage: 250, colour: 0x5a5240 },
-  },
 
   // ── wonder weapons ──
   {
@@ -1084,8 +785,10 @@ const NO_SIGHTS = new Set(["knife"]); // everything but the knife has sights
  * does what a sniper is for.
  */
 const MAGNIFY = {
-  pistol: 1.5, magnum: 1.5, shotgun: 1.5, dbarrel: 1.5, auto12: 1.5,
-  sniper: 6,
+  // pistols and shotguns barely magnify; a sniper does what a sniper is for
+  fiveseven: 1.5, tac45: 1.5, b23r: 1.5, kap40: 1.5, executioner: 1.5,
+  r870: 1.5, s12: 1.5, m1216: 1.5, krm262: 1.5, olympia: 1.5, stakeout: 1.5,
+  dsr50: 6, ballista: 6, xpr50: 6,
 };
 const hasSights = (w) => !!w && !NO_SIGHTS.has(w.id);
 const magnifyOf = (w) => (hasSights(w) ? (MAGNIFY[w.id] ?? 3) * (w?.zoomMul ?? 1) : 1);
@@ -1099,22 +802,22 @@ const aiming = () => aim.k > 0.02 && hasSights(curWeapon());
 const setAiming = (on) => { aim.held = on; };
 
 const BOX_POOL = [
-  "mp5", "mp5", "vector", "vector", "uzi", "uzi",
-  "ak47", "ak47", "m4", "m4", "scar", "scar",
-  "shotgun", "shotgun", "auto12", "auto12",
-  "magnum", "magnum", "sniper", "sniper",
-  "rpd", "dingo", "mg42",
-  "rpg", "m32", "gl40", "raygun",
+  "msmc", "msmc", "vectork10", "vectork10", "skorpion", "skorpion",
+  "type25", "type25", "m27", "m27", "scarh", "scarh",
+  "r870", "r870", "s12", "s12",
+  "tac45", "tac45", "ballista", "ballista",
+  "qbb", "hamr", "mk48",
+  "rpg", "m1216", "krm262", "raygun",
   // one entry each: the box is the only way to either of these now
   "raygun2", "jetgun",
 ];
 
 /** Two pistols and a knife — the same three every run starts with. */
 function startingSlots() {
-  const p = weaponById("pistol");
+  const p = weaponById("fiveseven");
   return [
-    { id: "pistol", mag: p.mag, reserve: p.reserve },
-    { id: "pistol", mag: p.mag, reserve: p.reserve },
+    { id: "fiveseven", mag: p.mag, reserve: p.reserve },
+    { id: "fiveseven", mag: p.mag, reserve: p.reserve },
     { id: "knife", mag: 0, reserve: 0 },
   ];
 }
@@ -1156,7 +859,7 @@ function attachedWeapon(id, atts) {
   return w;
 }
 
-const weaponFor = (slot) => slot?.up ?? slot?.fitted ?? weaponById(slot?.id ?? "pistol");
+const weaponFor = (slot) => slot?.up ?? slot?.fitted ?? weaponById(slot?.id ?? "fiveseven");
 const curSlot = () => game.slots[game.weapon];
 const curWeapon = () => weaponFor(curSlot());
 
@@ -3285,13 +2988,13 @@ function part(w, h, d, x, y, z, mat) {
 
 /* which silhouette each gun is built to */
 const RIFLE_LOOK = new Set([
-  "rifle", "smg", "lmg", "sniper",
+  "m27", "mp7", "lsat", "ballista",
   "mtar", "type25", "m27", "scarh", "swat556", "faldsw", "smr",
   "msmc", "mp7", "pdw57", "skorpion", "chicom", "vectork10", "peacekeeper",
   "lsat", "qbb", "hamr", "mk48",
   "dsr50", "ballista", "xpr50",
 ]);
-const PISTOL_LOOK = new Set(["pistol", "magnum", "fiveseven", "tac45", "b23r", "kap40"]);
+const PISTOL_LOOK = new Set(["fiveseven", "tac45", "fiveseven", "tac45", "b23r", "kap40"]);
 
 function buildViewmodel(id) {
   const g = new THREE.Group();
@@ -3302,7 +3005,7 @@ function buildViewmodel(id) {
   } else if (PISTOL_LOOK.has(id)) {
     g.add(part(0.09, 0.1, 0.36, 0, 0, -0.12, gunMetal)); // slide
     g.add(part(0.08, 0.2, 0.1, 0, -0.14, 0.03, gunGrip)); // grip
-  } else if (id === "dbarrel") {
+  } else if (id === "olympia") {
     g.add(part(0.06, 0.07, 0.86, -0.035, 0.01, -0.34, gunMetal)); // left barrel
     g.add(part(0.06, 0.07, 0.86, 0.035, 0.01, -0.34, gunMetal)); // right barrel
     g.add(part(0.1, 0.1, 0.2, 0, -0.02, 0.12, gunGrip)); // breech
@@ -3796,7 +3499,7 @@ const hasPerk = (id) => ownedPerks.has(id);
 const barriers = [];
 const wallBuys = [];
 
-const WALL_GUN = "dbarrel"; // the double barrel, hung inside the house
+const WALL_GUN = "olympia"; // the double barrel, hung inside the house
 const WALL_GUN_COST = 500;
 
 /* ── the Pack-a-Punch, and the bank ──────────────────────────── */
@@ -7472,7 +7175,7 @@ function resetGame() {
     recoil: 0,
     triggerHeld: false,
   });
-  viewmodels.pistol.visible = true;
+  viewmodels.fiveseven.visible = true;
 
   renderLoadout();
   resetPower();
@@ -7533,7 +7236,7 @@ $("menu-btn").addEventListener("click", toLobby);
 renderPanel();
 
 // prime the view before the first click
-viewmodels.pistol.visible = true;
+viewmodels.fiveseven.visible = true;
 camera.position.set(0, EYE, 8);
 renderLoadout();
 syncHud();

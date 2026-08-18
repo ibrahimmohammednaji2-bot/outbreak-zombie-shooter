@@ -286,7 +286,7 @@ for (const c of [750, 1000, 1250]) {
 }
 if (world.wallGuns.length !== 1) note(`${world.wallGuns.length} wall guns, expected 1`);
 else {
-  if (world.wallGuns[0].id !== "dbarrel") note(`the wall gun is ${world.wallGuns[0].id}, expected the double barrel`);
+  if (world.wallGuns[0].id !== "olympia") note(`the wall gun is ${world.wallGuns[0].id}, expected the double barrel`);
   if (world.wallGuns[0].cost !== 500) note(`the wall gun costs ${world.wallGuns[0].cost}, expected 500`);
 }
 
@@ -741,7 +741,7 @@ const works = await page.evaluate(async () => {
 
   // no power yet: the machine must refuse
   p.game.points = 999999;
-  p.game.slots = [{ id: "ak47", mag: 30, reserve: 90 }];
+  p.game.slots = [{ id: "type25", mag: 30, reserve: 90 }];
   p.game.weapon = 0;
   p.packCurrentWeapon();
   const papRefusedUnpowered = !p.game.slots[0].up;
@@ -756,7 +756,7 @@ const works = await page.evaluate(async () => {
   const powered = p.quest.powered;
 
   // now it works, and doubles what it should
-  const base = p.WEAPONS.find((w) => w.id === "ak47");
+  const base = p.WEAPONS.find((w) => w.id === "type25");
   p.game.points = 999999;
   p.packCurrentWeapon();
   const up = p.game.slots[0].up;
@@ -845,8 +845,8 @@ const sights = await page.evaluate(async () => {
   const without = p.WEAPONS.filter((w) => !p.hasSights(w)).map((w) => w.id);
 
   // put a rifle in hand and hold the right button
-  const rifle = p.WEAPONS.find((w) => w.id === "ak47");
-  p.game.slots = [{ id: "ak47", mag: rifle.mag, reserve: rifle.reserve }];
+  const rifle = p.WEAPONS.find((w) => w.id === "type25");
+  p.game.slots = [{ id: "type25", mag: rifle.mag, reserve: rifle.reserve }];
   p.game.weapon = 0;
   // the view eases rather than snapping, and this browser runs at a few
   // frames a second, so wait for it to settle instead of guessing at a delay
@@ -876,8 +876,8 @@ const sights = await page.evaluate(async () => {
   const backFov = await settleTo(0);
 
   // a shotgun aims too now, but barely — it should not zoom like a rifle
-  const sg = p.WEAPONS.find((w) => w.id === "shotgun");
-  p.game.slots = [{ id: "shotgun", mag: sg.mag, reserve: sg.reserve }];
+  const sg = p.WEAPONS.find((w) => w.id === "r870");
+  p.game.slots = [{ id: "r870", mag: sg.mag, reserve: sg.reserve }];
   p.setAiming(true);
   const shotgunFov = await settleTo(1);
   p.setAiming(false);
@@ -899,14 +899,14 @@ if (!(sights.shotgunFov > sights.aimedFov))
 if (Math.abs(sights.shotgunFov - sights.hipFov / 1.5) > 1)
   note(`a shotgun settled at ${sights.shotgunFov}°, expected about ${(sights.hipFov / 1.5).toFixed(1)}°`);
 if (sights.withSights.includes("knife")) note("the knife has sights and should not");
-for (const id of ["pistol", "magnum", "shotgun", "dbarrel", "auto12", "ak47", "sniper", "rpg", "raygun2"]) {
+for (const id of ["fiveseven", "tac45", "r870", "olympia", "s12", "type25", "ballista", "rpg", "raygun2"]) {
   if (!sights.withSights.includes(id)) note(`${id} has no sights and should have`);
 }
 // how far each kind pulls the world in
 for (const [id, want] of [
-  ["pistol", 1.5], ["magnum", 1.5], ["shotgun", 1.5], ["dbarrel", 1.5], ["auto12", 1.5],
-  ["sniper", 6],
-  ["ak47", 3], ["m4", 3], ["mp5", 3], ["rpd", 3], ["raygun2", 3], ["rpg", 3],
+  ["fiveseven", 1.5], ["tac45", 1.5], ["r870", 1.5], ["olympia", 1.5], ["s12", 1.5],
+  ["ballista", 6],
+  ["type25", 3], ["m27", 3], ["msmc", 3], ["qbb", 3], ["raygun2", 3], ["rpg", 3],
 ]) {
   const got = sights.magnify[id];
   if (got !== want) note(`${id} magnifies ${got}×, expected ${want}×`);
@@ -1116,8 +1116,8 @@ const shootAimed = await page.evaluate(async () => {
   p.game.mapId = "forest";
   p.resetGame();
   p.beginPlay();
-  const rifle = p.WEAPONS.find((w) => w.id === "ak47");
-  p.game.slots = [{ id: "ak47", mag: rifle.mag, reserve: rifle.reserve }];
+  const rifle = p.WEAPONS.find((w) => w.id === "type25");
+  p.game.slots = [{ id: "type25", mag: rifle.mag, reserve: rifle.reserve }];
   p.game.weapon = 0;
 
   /*
