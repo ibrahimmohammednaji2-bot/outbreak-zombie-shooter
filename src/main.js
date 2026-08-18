@@ -8091,6 +8091,20 @@ function reviveWithToken() {
 
 $("revive-btn").addEventListener("click", reviveWithToken);
 
+/*
+ * Anyone who redeemed the code before it granted tokens still deserves them.
+ *
+ * The box only offers the input until the code has been redeemed once; after
+ * that it is a toggle. So somebody who entered the code back when it only
+ * unlocked skins had no way left to trigger the grant — the feature worked
+ * perfectly and was unreachable for exactly the people who had already earned
+ * it. Granting on load fixes it for them without their having to do anything.
+ */
+function grantIfRedeemed() {
+  if (wallet.code.redeemed && !shop.unlimited) grantUnlimited();
+}
+grantIfRedeemed();
+
 renderShopButton();
 
 /*
@@ -8130,6 +8144,8 @@ if (import.meta.env.DEV) {
     LIGHT_BUDGET,
     lavaPools,
     REDEEM_CODE,
+    grantIfRedeemed,
+    saveShop,
     redeem,
     rollKind,
     DIFFS: DIFFICULTIES,

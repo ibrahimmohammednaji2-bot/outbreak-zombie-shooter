@@ -1201,8 +1201,20 @@ const code = await page.evaluate(() => {
   if (!input) return { error: "no code box on the main screen" };
   input.value = p.REDEEM_CODE;
   p.redeem();
+  const afterRedeem = p.shopState.unlimited;
+
+  /*
+   * The case the first version of this missed entirely: redeemed long ago,
+   * before the code granted tokens. The box shows a toggle by then, not an
+   * input, so there is no way left to ask for them.
+   */
+  p.shopState.unlimited = false;
+  p.saveShop?.();
+  p.grantIfRedeemed();
+
   return {
-    unlimited: p.shopState.unlimited,
+    unlimited: afterRedeem,
+    retroactive: p.shopState.unlimited,
     codeOn: p.wallet.code.active === true,
     message: document.getElementById("code-msg")?.textContent ?? "",
   };
@@ -1212,6 +1224,8 @@ else {
   step(`  "${code.message}"`);
   if (!code.codeOn) note("the code did not unlock the skins");
   if (!code.unlimited) note("the code did not grant unlimited tokens");
+  if (!code.retroactive)
+    note("someone who redeemed the code before tokens existed never gets them");
   if (!/TOKEN/i.test(code.message)) note("the code says nothing about the tokens it grants");
 }
 
