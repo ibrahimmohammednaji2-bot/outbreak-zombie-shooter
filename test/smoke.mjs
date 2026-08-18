@@ -1224,11 +1224,20 @@ const code = await page.evaluate(() => {
    */
   p.shopState.unlimited = false;
   p.saveShop?.();
-  p.grantIfRedeemed();
+  p.syncCodeTokens();
+  const retro = p.shopState.unlimited;
+
+  // and turning the code off has to take them away again
+  p.wallet.code.active = false;
+  p.syncCodeTokens();
+  const afterOff = p.shopState.unlimited;
+  p.wallet.code.active = true;
+  p.syncCodeTokens();
 
   return {
     unlimited: afterRedeem,
-    retroactive: p.shopState.unlimited,
+    retroactive: retro,
+    revoked: afterOff === false,
     codeOn: p.wallet.code.active === true,
     message: document.getElementById("code-msg")?.textContent ?? "",
   };
@@ -1240,6 +1249,8 @@ else {
   if (!code.unlimited) note("the code did not grant unlimited tokens");
   if (!code.retroactive)
     note("someone who redeemed the code before tokens existed never gets them");
+  if (!code.revoked)
+    note("switching the code off left the unlimited tokens behind");
   if (!/TOKEN/i.test(code.message)) note("the code says nothing about the tokens it grants");
 }
 

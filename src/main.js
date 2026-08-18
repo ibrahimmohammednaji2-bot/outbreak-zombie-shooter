@@ -60,6 +60,7 @@ import {
   hasToken,
   spendToken,
   grantUnlimited,
+  revokeUnlimited,
   priceOf,
   buyPack,
 } from "./shop.js";
@@ -7062,6 +7063,7 @@ $("code-box").addEventListener("click", (e) => {
 
   if (e.target.closest("#code-toggle")) {
     setCodeActive(!wallet.code.active);
+    syncCodeTokens();
     renderCodeBox();
     codeMessage(
       wallet.code.active ? "CODE ON — EVERYTHING UNLOCKED" : "CODE OFF — BOUGHT SKINS ONLY",
@@ -8694,10 +8696,18 @@ $("revive-btn").addEventListener("click", reviveWithToken);
  * perfectly and was unreachable for exactly the people who had already earned
  * it. Granting on load fixes it for them without their having to do anything.
  */
-function grantIfRedeemed() {
-  if (wallet.code.redeemed && !shop.unlimited) grantUnlimited();
+/*
+ * The tokens follow the code's switch, not merely the fact that it was once
+ * entered. Keying off "redeemed" alone handed unlimited tokens to anyone who
+ * had turned the code off — which is the one group who had explicitly said
+ * they did not want what it gives.
+ */
+function syncCodeTokens() {
+  const on = wallet.code.redeemed && wallet.code.active;
+  if (on && !shop.unlimited) grantUnlimited();
+  if (!on && shop.unlimited) revokeUnlimited();
 }
-grantIfRedeemed();
+syncCodeTokens();
 
 renderShopButton();
 
@@ -8738,7 +8748,7 @@ if (import.meta.env.DEV) {
     LIGHT_BUDGET,
     lavaPools,
     REDEEM_CODE,
-    grantIfRedeemed,
+    syncCodeTokens,
     saveShop,
     redeem,
     rollKind,

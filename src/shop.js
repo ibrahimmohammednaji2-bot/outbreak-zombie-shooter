@@ -87,6 +87,17 @@ export function grantUnlimited() {
   saveShop();
 }
 
+/*
+ * The master code can be switched off, and switching it off has to take back
+ * everything it gave — the skins already follow it, and the tokens have to as
+ * well. Anything bought or earned is untouched; only the code's own grant is
+ * withdrawn.
+ */
+export function revokeUnlimited() {
+  shop.unlimited = false;
+  saveShop();
+}
+
 /** Price after today's offer is taken into account. */
 export function priceOf(pack) {
   const offer = offerOfTheDay();
