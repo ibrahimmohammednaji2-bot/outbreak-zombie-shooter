@@ -2520,7 +2520,8 @@ function buildMap(def) {
 
   // ── mystery boxes ──
   mysteryBoxes.length = 0;
-  for (const b of def.boxes ?? []) {
+  // a free-for-all has no points, so nothing in it can be bought
+  for (const b of game.dm ? [] : def.boxes ?? []) {
     const crate = new THREE.Mesh(
       UNIT_BOX,
       new THREE.MeshLambertMaterial({ color: 0x6b4f2a, emissive: 0x2a1c06 }),

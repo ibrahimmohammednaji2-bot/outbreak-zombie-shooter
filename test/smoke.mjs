@@ -549,7 +549,15 @@ const dm = await page.evaluate(() => {
   } catch (e) {
     return { error: e.message };
   }
-  const out = { machines: p.perkMachines.length, running: p.game.running };
+  const out = {
+    machines: p.perkMachines.length,
+    boxes: p.mysteryBoxes.length,
+    barriers: p.barriers.length,
+    wallGuns: p.wallBuys.length,
+    pack: p.packMachines.length,
+    bank: p.bankTellers.length,
+    running: p.game.running,
+  };
   p.toLobby();
   return out;
 });
@@ -557,6 +565,12 @@ if (dm.error) note(`free-for-all threw on start — ${dm.error}`);
 else {
   if (!dm.running) note("free-for-all started but the game was not running");
   if (dm.machines) note(`${dm.machines} perk machines placed in a free-for-all`);
+  // none of the points economy belongs in a mode that has no points
+  if (dm.boxes) note(`${dm.boxes} mystery boxes in a free-for-all`);
+  if (dm.barriers) note(`${dm.barriers} paid barriers in a free-for-all`);
+  if (dm.wallGuns) note(`${dm.wallGuns} wall guns in a free-for-all`);
+  if (dm.pack) note("a Pack-a-Punch in a free-for-all");
+  if (dm.bank) note("a bank in a free-for-all");
 }
 
 // ── the shop ──
