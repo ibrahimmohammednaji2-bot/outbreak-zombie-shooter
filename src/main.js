@@ -2987,8 +2987,8 @@ const ZOMBIE_TYPES = {
   fat:      { chance: 0.10,  hp: 200, speed: 0.88, dmg: 33,  scale: 1.4,  label: "a fat one" },
   runner:   { chance: 0.05,  hp: 60,  speed: 6,    dmg: 33,  scale: 0.92, label: "a runner" },
   hopper:   { chance: 0.025, hp: 70,  speed: 2.2,  dmg: 33,  scale: 0.9,  label: "a hopper" },
-  finisher: { chance: 0.025, hp: 10,  speed: 3,    dmg: 100, scale: 0.95, label: "a finisher" },
-  bigdude:  { chance: 0.01,  hp: 300, speed: 1.75, dmg: 66,  scale: 2,    label: "the Big Dude", boss: true },
+  finisher: { chance: 0.025, hp: 10,  speed: 1.5,  dmg: 100, scale: 0.95, label: "a finisher" },
+  bigdude:  { chance: 0.01,  hp: 500, speed: 2,    dmg: 99,  scale: 2,    label: "the Big Dude", boss: true },
   reviver:  { chance: 0.01,  hp: 100, speed: 1.75, dmg: 33,  scale: 1,    label: "a Reviver", boss: true },
   marksman: { chance: 0.01,  hp: 120, speed: 1.6,  dmg: 70,  scale: 1,    label: "the Marksman", boss: true, sniper: true },
   walker:   { chance: 0,     hp: 100, speed: 1.75, dmg: 33,  scale: 1,    label: "a walker" },
@@ -3014,6 +3014,7 @@ function rollKind() {
 
 const CORPSE_TIME = 60; // how long a body lies there before it fades
 const REVIVE_TIME = 5; // a Reviver gets back up this long after falling
+const REVIVES_MAX = 3; // and only this many times before it stays down
 /*
  * How long a zombie may go nowhere before it is dug up and sent back in.
  *
@@ -5459,7 +5460,15 @@ function updateZombies(dt) {
 
       // A Reviver is only down, not out. Shoot the body to finish it.
       if (z.kind === "reviver" && !z.finished) {
+        // out of lives: it stops getting up whether or not anyone shot it
+        if ((z.revives ?? 0) >= REVIVES_MAX) {
+          z.finished = true;
+          unregisterZombie(z);
+          z.dying = CORPSE_TIME;
+          continue;
+        }
         if (z.dying >= REVIVE_TIME) {
+          z.revives = (z.revives ?? 0) + 1;
           z.dying = 0;
           z.alive = true;
           z.hp = z.maxHp * 0.6;
@@ -5698,7 +5707,19 @@ function updateZombies(dt) {
           new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z),
         );
         sfx.shot({ tone: 260, volume: 0.8 });
-        hurtPlayer(z.damage, ZOMBIE_TYPES.marksman.label);
+        /*
+         * Half its shots go wide. A sniper that never misses is not a fight,
+         * it is a tax on standing still — and seventy damage landing every
+         * time from across the map gives you nothing to react to.
+         */
+        if (Math.random() < 0.5) {
+          hurtPlayer(z.damage, ZOMBIE_TYPES.marksman.label);
+        } else {
+          spatter(
+            new THREE.Vector3(player.pos.x + (Math.random() - 0.5) * 3, player.pos.y, player.pos.z + (Math.random() - 0.5) * 3),
+            new THREE.Vector3(0, 1, 0), 4, dirtMat,
+          );
+        }
       }
     }
 
