@@ -1597,3 +1597,73 @@ button.ghost:hover {
   border-radius: 50%;
   background: rgba(6, 10, 8, 0.55);
 }
+
+/* ── the multiplayer lobby ─────────────────────────────────────
+   Menu down the left, who is playing on the right, and the map in the
+   corner: the shape of a console lobby, where the list is the page rather
+   than a panel floating on top of one. */
+#mplobby {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background:
+    radial-gradient(ellipse at 70% 60%, rgba(30, 46, 68, 0.5), transparent 60%),
+    #05070c;
+  color: #e8efe6;
+  padding: 48px 56px;
+  overflow: auto;
+}
+.mpl-title {
+  font-size: 42px;
+  font-weight: 300;
+  letter-spacing: 6px;
+  margin-bottom: 34px;
+}
+.mpl-menu { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.mpl-item {
+  background: none;
+  border: 0;
+  padding: 7px 0;
+  font: inherit;
+  font-size: 21px;
+  letter-spacing: 3px;
+  color: #7f8c95;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.mpl-item:hover, .mpl-item:focus-visible { color: #fff; }
+.mpl-item.head { color: #e8efe6; }
+.mpl-hint { margin-top: 16px; font-size: 13px; color: #6d7a82; letter-spacing: 1px; }
+.mpl-hint::before { content: "▸ "; }
+
+.mpl-players { position: absolute; top: 96px; right: 56px; text-align: right; }
+.mpl-count { font-size: 15px; letter-spacing: 1px; color: #c8d2d8; }
+.mpl-list { list-style: none; margin-top: 10px; }
+.mpl-list li { font-size: 15px; letter-spacing: 1px; color: #9fb0ba; padding: 3px 0; }
+.mpl-list li b { color: #fff; font-weight: 500; }
+
+.mpl-card { position: absolute; left: 56px; bottom: 48px; width: 300px; }
+.mpl-thumb {
+  height: 150px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(160deg, rgba(120, 150, 170, 0.35), rgba(10, 16, 24, 0.9)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 6px);
+}
+.mpl-cardname { margin-top: -46px; padding: 0 12px 10px; position: relative; text-align: right; }
+.mpl-cardname b { display: block; font-size: 17px; letter-spacing: 2px; }
+.mpl-cardname span { font-size: 12px; letter-spacing: 2px; color: #b9c6cd; }
+
+.mpl-back {
+  position: absolute;
+  right: 56px;
+  bottom: 48px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #c8d2d8;
+  padding: 9px 22px;
+  font: inherit;
+  letter-spacing: 3px;
+  cursor: pointer;
+}
+.mpl-back:hover { border-color: #fff; color: #fff; }

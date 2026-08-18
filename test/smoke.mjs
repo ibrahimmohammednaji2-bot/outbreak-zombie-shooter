@@ -1300,6 +1300,39 @@ step(`  ${atts.checked} checked, ${atts.inert.length} with no stats of their own
 for (const id of atts.wrong) note(`the ${id} attachment does not change the gun the way it claims`);
 if (!atts.stacks) note("two attachments do not stack — one is overwriting the other");
 
+// ── the multiplayer lobby ──
+step("the multiplayer lobby opens and its menu works")
+const lobby = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.toLobby();
+  p.openMultiplayer();
+  const el = document.getElementById("mplobby");
+  const out = {
+    open: !el.classList.contains("hidden"),
+    items: [...el.querySelectorAll("[data-mpl]")].map((b) => b.textContent.trim()),
+    players: el.querySelectorAll("#mpl-list li").length,
+    map: document.getElementById("mpl-map")?.textContent ?? "",
+  };
+
+  // create a class has to reach the class screen, and back has to return
+  el.querySelector('[data-mpl="class"]').click();
+  out.toClass = !document.getElementById("mp").classList.contains("hidden");
+  document.getElementById("mp-back").click();
+  out.backToLobby = !el.classList.contains("hidden") &&
+    document.getElementById("mp").classList.contains("hidden");
+
+  document.getElementById("mpl-back").click();
+  out.closed = el.classList.contains("hidden");
+  return out;
+});
+step(`  ${lobby.items.length} items, ${lobby.players} players, map ${lobby.map}`);
+if (!lobby.open) note("the multiplayer lobby did not open");
+if (lobby.items.length !== 5) note(`the lobby has ${lobby.items.length} menu items, expected 5`);
+if (!lobby.players) note("the lobby lists no players");
+if (!lobby.toClass) note("create a class did not open the class screen");
+if (!lobby.backToLobby) note("backing out of the class screen did not return to the lobby");
+if (!lobby.closed) note("the lobby would not close");
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

@@ -222,6 +222,36 @@
     </div>
 
     <!-- create a class -->
+    <!-- the multiplayer lobby: menu down the left, players on the right,
+         and the map you are about to play in the corner -->
+    <div id="mplobby" class="hidden">
+      <h1 class="mpl-title">LOCAL</h1>
+
+      <nav class="mpl-menu" aria-label="Multiplayer">
+        <button class="mpl-item head" data-mpl="start">START MATCH</button>
+        <button class="mpl-item" data-mpl="setup">SETUP GAME</button>
+        <button class="mpl-item" data-mpl="bots">SETUP BOTS</button>
+        <button class="mpl-item" data-mpl="class">CREATE A CLASS</button>
+        <button class="mpl-item" data-mpl="streaks">SCORESTREAKS</button>
+        <p class="mpl-hint" id="mpl-hint">Begin the game.</p>
+      </nav>
+
+      <div class="mpl-players">
+        <p class="mpl-count"><span id="mpl-count">2</span> Players (8 Max)</p>
+        <ol class="mpl-list" id="mpl-list"></ol>
+      </div>
+
+      <div class="mpl-card">
+        <div class="mpl-thumb" id="mpl-thumb"></div>
+        <div class="mpl-cardname">
+          <b id="mpl-map">FOREST</b>
+          <span id="mpl-mode">FREE-FOR-ALL</span>
+        </div>
+      </div>
+
+      <button class="mpl-back" id="mpl-back">BACK</button>
+    </div>
+
     <div id="mp" class="hidden">
       <div class="mp-head">
         <input id="mp-name" maxlength="16" spellcheck="false" autocomplete="off" />

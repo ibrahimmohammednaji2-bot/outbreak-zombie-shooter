@@ -7414,13 +7414,61 @@ function applyPick(id) {
 
 /* ── wiring ── */
 
+/*
+ * The multiplayer lobby. Menu down the left, who is playing on the right, the
+ * map you are about to play in the corner — the shape of a console lobby,
+ * where the list is the page rather than a panel floating over one. Creating a
+ * class is one item on it rather than the whole screen.
+ */
 function openMultiplayer() {
-  renderMp();
-  $("mp-status").textContent = "";
-  $("mp").classList.remove("hidden");
+  renderMpLobby();
+  $("mplobby").classList.remove("hidden");
 }
 
-$("mp-back").addEventListener("click", () => $("mp").classList.add("hidden"));
+function renderMpLobby() {
+  const names = [account.name || "You", ...BOT_NAMES.slice(0, 5)];
+  $("mpl-count").textContent = names.length;
+  $("mpl-list").innerHTML = names
+    .map((n, i) => `<li>${i === 0 ? `<b>${n}</b>` : n}</li>`)
+    .join("");
+  $("mpl-map").textContent = mapById(game.mapId).name.toUpperCase();
+  $("mpl-mode").textContent = "FREE-FOR-ALL";
+}
+
+$("mplobby").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-mpl]");
+  if (!item) return;
+  const what = item.dataset.mpl;
+
+  if (what === "start") {
+    $("mplobby").classList.add("hidden");
+    startDeathmatch();
+  } else if (what === "class") {
+    renderMp();
+    $("mp-status").textContent = "";
+    $("mp").classList.remove("hidden");
+  } else if (what === "setup") {
+    // the map picker the zombies side already uses
+    $("mplobby").classList.add("hidden");
+    panelKind = "map";
+    renderPanel();
+    $("lobby-panel").classList.remove("hidden");
+  } else {
+    // bots and scorestreaks are not built yet, and saying so beats a dead click
+    $("mpl-hint").textContent =
+      what === "bots"
+        ? "Bots fill the match already. Choosing how many is not built yet."
+        : "Scorestreaks are not built yet.";
+  }
+});
+
+$("mpl-back").addEventListener("click", () => $("mplobby").classList.add("hidden"));
+
+$("mp-back").addEventListener("click", () => {
+  // back out of the class screen into the lobby it was opened from
+  $("mp").classList.add("hidden");
+  $("mplobby").classList.remove("hidden");
+});
 $("picker-close").addEventListener("click", () => {
   $("mp-picker").classList.add("hidden");
   picker = null;
@@ -7497,6 +7545,7 @@ $("mp-find").addEventListener("click", async () => {
   if (mpOpponents === "bots") {
     try {
       $("mp").classList.add("hidden");
+      $("mplobby").classList.add("hidden");
       startDeathmatch();
     } catch (err) {
       console.error(err);
@@ -8543,6 +8592,7 @@ if (import.meta.env.DEV) {
     activatePower,
     startDeathmatch,
     toLobby,
+    openMultiplayer,
     beginPlay,
   };
 }
