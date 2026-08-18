@@ -41,6 +41,7 @@ import {
   LETHALS,
   TACTICALS,
   ATTACHMENTS,
+  attachmentById,
   WILDCARDS,
   MAX_POINTS,
   loadClasses,
@@ -1087,7 +1088,7 @@ const MAGNIFY = {
   sniper: 6,
 };
 const hasSights = (w) => !!w && !NO_SIGHTS.has(w.id);
-const magnifyOf = (w) => (hasSights(w) ? (MAGNIFY[w.id] ?? 3) : 1);
+const magnifyOf = (w) => (hasSights(w) ? (MAGNIFY[w.id] ?? 3) * (w?.zoomMul ?? 1) : 1);
 const zoomOf = (w) => 1 / magnifyOf(w);
 
 const AIM_SPREAD = 0.22; // what is left of the cone once you are on the sights
@@ -1124,7 +1125,38 @@ function startingSlots() {
  * know what a gun does asks here rather than looking the id up itself, so an
  * upgraded gun behaves like the upgrade everywhere at once.
  */
-const weaponFor = (slot) => slot?.up ?? weaponById(slot?.id ?? "pistol");
+/*
+ * A gun with its attachments on it.
+ *
+ * Worked out once when the slot is built rather than on every read — a gun's
+ * stats are looked at several times a frame — and cached on the slot, so the
+ * class screen and the trigger are looking at the same object and cannot
+ * disagree about what a Long Barrel does.
+ */
+function attachedWeapon(id, atts) {
+  const base = weaponById(id);
+  if (!atts?.length) return base;
+
+  const w = { ...base, atts: [...atts] };
+  for (const attId of atts) {
+    const m = attachmentById(attId)?.mod;
+    if (!m) continue;
+    if (m.dmg) w.damage *= m.dmg;
+    if (m.mag) w.mag = Math.round(w.mag * m.mag);
+    if (m.reload) w.reload *= m.reload;
+    if (m.recoil) w.recoil *= m.recoil;
+    if (m.spread) w.spread *= m.spread;
+    if (m.zoom) w.zoomMul = (w.zoomMul ?? 1) * m.zoom;
+    if (m.ads) w.adsMul = (w.adsMul ?? 1) * m.ads;
+    if (m.adsWalk) w.adsWalk = (w.adsWalk ?? 1) * m.adsWalk;
+    if (m.quiet) w.quiet = true;
+    if (m.autoFire) w.auto = true;
+  }
+  w.damage = Math.round(w.damage * 10) / 10;
+  return w;
+}
+
+const weaponFor = (slot) => slot?.up ?? slot?.fitted ?? weaponById(slot?.id ?? "pistol");
 const curSlot = () => game.slots[game.weapon];
 const curWeapon = () => weaponFor(curSlot());
 
@@ -5933,7 +5965,7 @@ function movePlayer(dt) {
     (powerActive("sprint") ? powerAmount("sprint") : 1) *
     (player.slow > 0 ? 0.45 : 1) *
     (hasPerk("stamin") ? 1.5 : 1) *
-    (aiming() ? AIM_WALK : 1); // you walk it down while you are on the sights
+    (aiming() ? AIM_WALK * (curWeapon().adsWalk ?? 1) : 1); // stocked, you keep more of it
 
   if (moving) wish.normalize().multiplyScalar(speed);
 
@@ -6511,7 +6543,9 @@ function animate() {
    * button is held.
    */
   const wantAim = aim.held && hasSights(curWeapon()) && game.reloadTimer <= 0 && !game.over;
-  aim.k = THREE.MathUtils.clamp(aim.k + (wantAim ? dt * 7 : -dt * 9), 0, 1);
+  // Quickdraw brings it up faster; an optic slower
+  const adsRate = 7 / (curWeapon().adsMul ?? 1);
+  aim.k = THREE.MathUtils.clamp(aim.k + (wantAim ? dt * adsRate : -dt * 9), 0, 1);
 
   const ease = aim.k * aim.k * (3 - 2 * aim.k); // gentle at both ends
   const wantFov = HIP_FOV * (1 - ease * (1 - zoomOf(curWeapon())));
@@ -8086,8 +8120,15 @@ function startDeathmatch() {
 
   // your class, in your hands
   const slots = [];
-  if (c.primary) slots.push({ id: c.primary, ...ammoFor(c.primary) });
-  if (c.secondary) slots.push({ id: c.secondary, ...ammoFor(c.secondary) });
+  // the attachments are part of the gun from the moment it is handed over
+  if (c.primary) {
+    const w = attachedWeapon(c.primary, c.primaryAtt);
+    slots.push({ id: c.primary, fitted: w, mag: w.mag, reserve: w.reserve });
+  }
+  if (c.secondary) {
+    const w = attachedWeapon(c.secondary, c.secondaryAtt);
+    slots.push({ id: c.secondary, fitted: w, mag: w.mag, reserve: w.reserve });
+  }
   slots.push({ id: "knife", mag: 0, reserve: 0 });
   game.slots = slots;
   game.weapon = 0;
@@ -8743,6 +8784,8 @@ if (import.meta.env.DEV) {
     freeLeroy,
     weaponFor,
     magnifyOf,
+    attachedWeapon,
+    ATTACHMENTS,
     liveCap,
     scene,
     LIGHT_BUDGET,

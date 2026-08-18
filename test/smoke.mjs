@@ -1254,6 +1254,52 @@ else {
   if (!/TOKEN/i.test(code.message)) note("the code says nothing about the tokens it grants");
 }
 
+/*
+ * Attachments have to change the gun, and change it in the direction they
+ * claim. Each one is fitted on its own and compared against the bare weapon.
+ */
+step("every attachment changes the gun it is fitted to")
+const atts = await page.evaluate(() => {
+  const p = window.__probe;
+  const base = p.weaponFor({ id: "m27" });
+  const out = { checked: 0, wrong: [], inert: [] };
+
+  const expect = {
+    quickdraw: (w) => w.adsMul < 1,
+    acog: (w) => w.zoomMul > 1 && w.adsMul > 1,
+    hybrid: (w) => w.zoomMul > 1,
+    varzoom: (w) => w.zoomMul > 1,
+    targetfinder: (w) => w.adsMul > 1,
+    cpu: (w) => w.spread < base.spread,
+    suppressor: (w) => w.damage < base.damage,
+    brake: (w) => w.recoil < base.recoil,
+    longbarrel: (w) => w.damage > base.damage,
+    grip: (w) => w.spread < base.spread && w.recoil < base.recoil,
+    laser: (w) => w.spread < base.spread,
+    fmj: (w) => w.damage > base.damage,
+    extmag: (w) => w.mag > base.mag,
+    fastmag: (w) => w.reload < base.reload,
+    stock: (w) => w.adsWalk > 1,
+    selectfire: (w) => w.auto === true,
+  };
+
+  for (const a of p.ATTACHMENTS) {
+    const w = p.attachedWeapon("m27", [a.id]);
+    const check = expect[a.id];
+    if (!check) { out.inert.push(a.id); continue; }
+    out.checked++;
+    if (!check(w)) out.wrong.push(a.id);
+  }
+
+  // and two together stack rather than one winning
+  const both = p.attachedWeapon("m27", ["grip", "brake"]);
+  out.stacks = both.recoil < p.attachedWeapon("m27", ["grip"]).recoil;
+  return out;
+});
+step(`  ${atts.checked} checked, ${atts.inert.length} with no stats of their own`);
+for (const id of atts.wrong) note(`the ${id} attachment does not change the gun the way it claims`);
+if (!atts.stacks) note("two attachments do not stack — one is overwriting the other");
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

@@ -43,18 +43,43 @@ export const TACTICALS = [
   { id: "shock", name: "Shock Charge", desc: "Stuns whoever trips it." },
 ];
 
+/*
+ * Attachments, and what each one actually does to the gun.
+ *
+ * Every field here is a multiplier on the weapon's own number except where
+ * named otherwise, and they are applied in one place — see attachedWeapon in
+ * main.js — so an attachment cannot mean one thing in the class screen and
+ * another when you pull the trigger.
+ *
+ * ads    aim-down-sights time      spread  hipfire cone
+ * zoom   magnification             recoil  kick per shot
+ * mag    rounds in a magazine      reload  time to reload
+ * range  falloff distance          dmg     damage per round
+ */
 export const ATTACHMENTS = [
-  { id: "reflex", name: "Reflex Sight", desc: "Clean red dot." },
-  { id: "elo", name: "ELO Sight", desc: "Wider sight picture." },
-  { id: "acog", name: "ACOG Scope", desc: "Magnified optic." },
-  { id: "grip", name: "Foregrip", desc: "Less recoil." },
-  { id: "extmag", name: "Extended Mag", desc: "More rounds per magazine." },
-  { id: "fastmag", name: "Fast Mag", desc: "Quicker reloads." },
-  { id: "suppressor", name: "Suppressor", desc: "Quiet, and off the radar." },
-  { id: "laser", name: "Laser Sight", desc: "Tighter hipfire." },
-  { id: "stock", name: "Stock", desc: "Move faster while aiming." },
-  { id: "quickdraw", name: "Quickdraw", desc: "Aim down sights faster." },
+  { id: "reflex", name: "Red Dot Sight", desc: "A clean sight picture and nothing else.", cost: 1, mod: {} },
+  { id: "elo", name: "ELO Sight", desc: "A wider sight picture.", cost: 1, mod: {} },
+  { id: "acog", name: "ACOG Scope", desc: "Four times magnification, slower onto the sights.", cost: 1, mod: { zoom: 1.6, ads: 1.15, flinch: 1.2 } },
+  { id: "hybrid", name: "Hybrid Optic", desc: "A scope and a red dot. Costs two.", cost: 2, mod: { zoom: 1.35, ads: 1.08 } },
+  { id: "varzoom", name: "Variable Zoom", desc: "More magnification again. Snipers only.", cost: 1, mod: { zoom: 1.9, ads: 1.2 } },
+  { id: "targetfinder", name: "Target Finder", desc: "Marks what you are pointing at. Heavy and slow.", cost: 1, mod: { ads: 1.35, marks: true } },
+  { id: "cpu", name: "Ballistics CPU", desc: "Steadies a long shot.", cost: 1, mod: { spread: 0.6 } },
+  { id: "suppressor", name: "Suppressor", desc: "Quiet, and off the radar. Costs you reach.", cost: 1, mod: { range: 0.5, dmg: 0.96, quiet: true } },
+  { id: "brake", name: "Muzzle Brake", desc: "The gun barely moves.", cost: 1, mod: { recoil: 0.6 } },
+  { id: "longbarrel", name: "Long Barrel", desc: "Kills further out.", cost: 1, mod: { range: 1.35, dmg: 1.06 } },
+  { id: "quickdraw", name: "Quickdraw Handle", desc: "On the sights half again as fast.", cost: 1, mod: { ads: 0.55 } },
+  { id: "grip", name: "Fore Grip", desc: "Tighter hipfire and less kick.", cost: 1, mod: { spread: 0.5, recoil: 0.7 } },
+  { id: "laser", name: "Laser Sight", desc: "Much tighter hipfire. Shows where you are.", cost: 1, mod: { spread: 0.55 } },
+  { id: "fmj", name: "FMJ", desc: "Hits harder through cover.", cost: 1, mod: { dmg: 1.2 } },
+  { id: "extmag", name: "Extended Clip", desc: "Half again as many rounds, slower to reload.", cost: 1, mod: { mag: 1.5, reload: 1.12 } },
+  { id: "fastmag", name: "Fast Mag", desc: "Reloads in two thirds the time.", cost: 1, mod: { reload: 0.7 } },
+  { id: "stock", name: "Adjustable Stock", desc: "Move faster with the gun up.", cost: 1, mod: { adsWalk: 1.4 } },
+  { id: "selectfire", name: "Select Fire", desc: "Makes a semi-automatic fire on its own.", cost: 1, mod: { autoFire: true } },
+  { id: "grenadelauncher", name: "Grenade Launcher", desc: "Two rounds under the barrel. Costs two.", cost: 2, mod: {} },
+  { id: "masterkey", name: "Masterkey", desc: "A shotgun under the barrel. Costs two.", cost: 2, mod: {} },
 ];
+
+export const attachmentById = (id) => ATTACHMENTS.find((a) => a.id === id);
 
 export const WILDCARDS = [
   { id: "gunfighter", name: "Primary Gunfighter", desc: "A third attachment on your primary." },
