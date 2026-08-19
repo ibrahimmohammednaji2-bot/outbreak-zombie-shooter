@@ -2836,6 +2836,252 @@ const MAPS = [
       }),
     ],
   },
+  {
+    id: "raid",
+    name: "Raid",
+    mp: true,
+    blurb: "A Hollywood mansion. A courtyard in the middle, a pool, and rooms all round it.",
+    half: 46,
+    ground: 11049854,
+    sky: 10338525,
+    fog: 0.0035,
+    light: 1.2,
+    start: [0, 32],
+    fires: [],
+    props: [
+      ...house(0, -14, 1601),
+      ...house(-26, 16, 1607),
+      ...house(26, 16, 1613),
+      // the pool and the courtyard between them
+      ...scatter(1, 1619, () => [
+        box(0, 14, 14, 0.3, 9, 0x3f8fc4),
+        box(0, 14, 16, 0.5, 11, 0xd8d2c4),
+      ]).flat(),
+      ...scatter(30, 1621, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 26;
+        const sz = 0.9 + rnd() * 1.1;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.6, sz, sz, 0xb9a37a, rnd() * 3);
+      }),
+      ...scatter(26, 1627, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 26 + rnd() * 14;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 3, 2.4, 0.5, 0xc4b89a, a + Math.PI / 2);
+      }),
+    ],
+  },
+  {
+    id: "express",
+    name: "Express",
+    mp: true,
+    blurb: "A high-speed train station. Long platforms, glass, and a train through the middle.",
+    half: 52,
+    ground: 7304056,
+    sky: 2764856,
+    fog: 0.005,
+    light: 0.95,
+    start: [0, 40],
+    fires: [],
+    props: [
+      // the platforms either side of the track
+      ...scatter(1, 1701, () => [
+        box(-13, 0, 12, 1, 70, 0x8d8c88),
+        box(13, 0, 12, 1, 70, 0x8d8c88),
+        box(0, 0, 9, 0.3, 74, 0x3a3d42),
+      ]).flat(),
+      // the train standing in it
+      ...scatter(4, 1707, (rnd) => box(0, -26 + rnd() * 52, 7, 5, 16, 0xc9ccd0, 0, 0.4)),
+      // the station roof on its columns, and the benches
+      ...scatter(22, 1709, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 24;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 0.8, 7, 0.8, 0xb0b4b8);
+      }),
+      ...scatter(24, 1713, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 22;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 2.6, 0.9, 1, 0x6b6f74, rnd() * 3);
+      }),
+      ...scatter(20, 1717, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 16 + rnd() * 26;
+        const sz = 0.9 + rnd() * 0.8;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+      // barriers, signage and luggage: a platform and a train is a floor,
+      // not somewhere to fight
+      ...scatter(40, 1721, (rnd) => {
+        const side = rnd() > 0.5 ? 1 : -1;
+        const z = (rnd() - 0.5) * 66;
+        return box(side * (9 + rnd() * 7), z, 2.4, 1.2, 0.4, 0x9aa0a6, rnd() > 0.5 ? 0 : Math.PI / 2);
+      }),
+      ...scatter(26, 1723, (rnd) => {
+        const side = rnd() > 0.5 ? 1 : -1;
+        const z = (rnd() - 0.5) * 60;
+        const sz = 0.6 + rnd() * 0.7;
+        return box(side * (10 + rnd() * 6), z, sz, sz * 1.3, sz, 0x4a4640, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "plaza",
+    name: "Plaza",
+    mp: true,
+    blurb: "A resort. Glass buildings, walkways, and a pool in the middle of it.",
+    half: 48,
+    ground: 12562060,
+    sky: 9422048,
+    fog: 0.003,
+    light: 1.25,
+    start: [0, 34],
+    fires: [],
+    props: [
+      ...storefront(-22, 10, 18, 14, 1801, Math.PI / 2),
+      ...storefront(22, -10, 18, 14, 1809, -Math.PI / 2),
+      ...house(0, -30, 1817),
+      ...scatter(1, 1823, () => [box(0, 4, 16, 0.3, 12, 0x3fb0d4), box(0, 4, 18, 0.5, 14, 0xe8e0cc)]).flat(),
+      ...scatter(34, 1831, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 8 + rnd() * 28;
+        const sz = 0.8 + rnd() * 1;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.7, sz * 0.8, sz, 0xd8cfae, rnd() * 3);
+      }),
+      ...scatter(22, 1847, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 20 + rnd() * 20;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 3.4, 3, 0.4, 0xa8c6d8, a + Math.PI / 2);
+      }),
+    ],
+  },
+  {
+    id: "yemen",
+    name: "Yemen",
+    mp: true,
+    blurb: "A hillside town. Rooftops above alleys, and long drops between the levels.",
+    half: 50,
+    ground: 10256982,
+    sky: 13218954,
+    fog: 0.0045,
+    light: 1.15,
+    start: [0, 36],
+    fires: [],
+    props: [
+      ...house(-20, 8, 1901),
+      ...house(18, -6, 1907),
+      ...house(-6, -28, 1913),
+      ...house(24, 24, 1919),
+      // terraces: the town steps down the hill rather than sitting flat
+      ...scatter(26, 1923, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 28;
+        const h = 2 + rnd() * 5;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 7, h, 7, 0xa88a5c, rnd() * 3);
+      }),
+      ...scatter(34, 1931, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 30;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 3.4, 2.6, 0.6, 0x8d7346, a + Math.PI / 2);
+      }),
+      ...scatter(20, 1933, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 26;
+        const sz = 0.8 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "turbine",
+    name: "Turbine",
+    mp: true,
+    blurb: "A desert wind farm. Enormous turbines, and not much between them.",
+    half: 56,
+    ground: 11903095,
+    sky: 12766680,
+    fog: 0.004,
+    light: 1.2,
+    start: [0, 42],
+    fires: [],
+    props: [
+      // the turbines, tall enough to steer by
+      ...scatter(5, 2001, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 16 + rnd() * 30;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        return [
+          cyl(x, z, 1.1, 2, 26, 0xe2e2e0),
+          { ...box(x, z, 30, 0.8, 1.2, 0xe2e2e0, rnd() * 3), y: 26, clip: false },
+        ];
+      }).flat(),
+      ...storefront(-24, -14, 15, 12, 2011, Math.PI / 2),
+      ...house(22, 16, 2017),
+      ...scatter(34, 2021, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 34;
+        const sz = 1 + rnd() * 1.6;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 2, sz * 0.8, sz * 1.4, 0x8d8272, rnd() * 3);
+      }),
+      ...scatter(26, 2027, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 30;
+        return rocks(Math.cos(a) * d, Math.sin(a) * d, 1 + rnd() * 1.6, rnd);
+      }).flat(),
+    ],
+  },
+  {
+    id: "cargo",
+    name: "Cargo",
+    mp: true,
+    blurb: "A shipping port. Containers stacked into corridors, and cranes over them.",
+    half: 50,
+    ground: 6251368,
+    sky: 7766156,
+    fog: 0.0045,
+    light: 1.05,
+    start: [0, 38],
+    fires: [],
+    props: [
+      // containers, stacked: the corridors between them are the map
+      ...scatter(46, 2101, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 8 + rnd() * 34;
+        const x = Math.round(Math.cos(a) * d / 7) * 7;
+        const z = Math.round(Math.sin(a) * d / 7) * 7;
+        const stack = rnd() > 0.68 ? 2 : 1;
+        const col = pickR([0xb04a2a, 0x2a6ba0, 0x3f8a4a, 0xc4a02a], rnd);
+        return box(x, z, 6.4, 2.9 * stack, 2.9, col, rnd() > 0.5 ? 0 : Math.PI / 2);
+      }),
+      // the cranes over the yard
+      ...scatter(2, 2111, (rnd) => {
+        const x = (rnd() - 0.5) * 60;
+        return [
+          box(x, -30, 1.2, 22, 1.2, 0xc4a02a),
+          box(x, 30, 1.2, 22, 1.2, 0xc4a02a),
+          { ...box(x, 0, 2, 1.4, 62, 0xc4a02a), y: 22, clip: false },
+        ];
+      }).flat(),
+      ...scatter(22, 2117, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 32;
+        const sz = 0.9 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+      // more containers, off the grid this time, so the corridors are not all
+      // straight lines
+      ...scatter(34, 2121, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 34;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 6.4, 2.9, 2.9,
+          pickR([0xb04a2a, 0x2a6ba0, 0x3f8a4a, 0x8d8272], rnd), rnd() * 3);
+      }),
+      ...scatter(24, 2129, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 30;
+        return cyl(Math.cos(a) * d, Math.sin(a) * d, 0.9, 1, 2.2, 0x5e4632);
+      }),
+    ],
+  },
 ];
 
 /*
