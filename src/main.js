@@ -1894,6 +1894,7 @@ const cityMarks = [];
 const townBoxes = [];
 const farmBoxes = [];
 const townLava = [];
+const magmaLava = [];
 const transitBoxes = [];
 const transitMarks = [];
 const transitLava = [];
@@ -3079,6 +3080,272 @@ const MAPS = [
         const a = rnd() * Math.PI * 2;
         const d = 14 + rnd() * 30;
         return cyl(Math.cos(a) * d, Math.sin(a) * d, 0.9, 1, 2.2, 0x5e4632);
+      }),
+    ],
+  },
+  {
+    id: "aftermath",
+    name: "Aftermath",
+    mp: true,
+    blurb: "A city knocked down. The rubble is the map — what fell became the way through.",
+    half: 54,
+    ground: 5525834,
+    sky: 8023910,
+    fog: 0.006,
+    light: 0.9,
+    start: [0, 39],
+    fires: [],
+    props: [
+      ...ruinBlock(-22, 16, 2201),
+      ...ruinBlock(24, -14, 2207),
+      ...ruinBlock(-6, -32, 2213),
+      ...ruinBlock(30, 28, 2219),
+      ...scatter(4, 2221, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        return house(Math.cos(a) * (30 + rnd() * 12), Math.sin(a) * (30 + rnd() * 12), 2221 + Math.floor(rnd() * 800));
+      }).flat(),
+      ...scatter(44, 2227, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 8 + rnd() * 36;
+        const sz = 1.2 + rnd() * 1.2;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, sz * 0.9, sz, 0x6f665b, rnd() * 3);
+      }),
+      ...scatter(26, 2237, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 32;
+        const sz = 1.6 + rnd() * 1.6;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.4, sz, 0x3a332e, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "overflow",
+    name: "Overflow",
+    mp: true,
+    blurb: "A flooded city. Water where the streets were, and the buildings are the dry ground.",
+    half: 52,
+    ground: 3820114,
+    sky: 9082272,
+    fog: 0.005,
+    light: 1,
+    start: [0, 37],
+    fires: [],
+    props: [
+      ...scatter(6, 2301, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        return house(Math.cos(a) * (24 + rnd() * 14), Math.sin(a) * (24 + rnd() * 14), 2301 + Math.floor(rnd() * 800));
+      }).flat(),
+      ...scatter(1, 2309, () => [box(0, 0, 46, 0.25, 46, 0x2f6a86)]).flat(),
+      ...scatter(40, 2311, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 34;
+        const sz = 1.3 + rnd() * 1.3;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.1, sz, 0x5f574e, rnd() * 3);
+      }),
+      ...scatter(20, 2317, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 30;
+        const sz = 1.1 + rnd() * 1.1;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.6, sz, 0x2a3634, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "drone",
+    name: "Drone",
+    mp: true,
+    blurb: "Jungle outside, a facility inside. The two never look like the same place.",
+    half: 50,
+    ground: 3097382,
+    sky: 4872762,
+    fog: 0.007,
+    light: 0.85,
+    start: [0, 36],
+    fires: [],
+    props: [
+      ...storefront(-18, 8, 20, 16, 2401, Math.PI / 2),
+      ...storefront(18, -8, 20, 16, 2409, -Math.PI / 2),
+      ...scatter(30, 2417, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 26 + rnd() * 18;
+        return tree(Math.cos(a) * d, Math.sin(a) * d, 0.9 + rnd() * 0.9, rnd);
+      }).flat(),
+      ...scatter(30, 2423, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 30;
+        const sz = 1.1 + rnd() * 1.1;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.2, sz, 0x5a5f66, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "meltdown",
+    name: "Meltdown",
+    mp: true,
+    blurb: "A power station. Cooling towers, pipework, and platforms above the floor.",
+    half: 52,
+    ground: 7040884,
+    sky: 9410464,
+    fog: 0.005,
+    light: 1,
+    start: [0, 37],
+    fires: [],
+    props: [
+      ...scatter(3, 2501, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 20 + rnd() * 16;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        return [cyl(x, z, 7, 9, 22, 0xb0b4b8), { ...cone(x, z, 10, 6, 0x9aa0a6, 22), clip: false }];
+      }).flat(),
+      ...storefront(0, -30, 18, 14, 2509, 0),
+      ...scatter(36, 2511, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 32;
+        const sz = 1.4 + rnd() * 1.4;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 2, sz, 0x7a7f84, rnd() * 3);
+      }),
+      // pipework and walkways: three cooling towers and a shed is a yard,
+      // not a place with corners to fight round
+      ...scatter(40, 2531, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 30;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 8, 0.9, 0.9, 0x8a8d90, a);
+      }),
+      ...scatter(30, 2537, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 28;
+        return cyl(Math.cos(a) * d, Math.sin(a) * d, 1, 1.1, 3.2, 0x6b6f74);
+      }),
+      ...scatter(22, 2519, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 14 + rnd() * 28;
+        const sz = 0.9 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 3.4, sz, 0x5a5f66, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "downhill",
+    name: "Downhill",
+    mp: true,
+    blurb: "A ski resort. Snow, lodges, and a slope that decides which way a fight goes.",
+    half: 54,
+    ground: 14673644,
+    sky: 12111069,
+    fog: 0.004,
+    light: 1.3,
+    start: [0, 39],
+    fires: [],
+    props: [
+      ...scatter(5, 2601, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        return house(Math.cos(a) * (24 + rnd() * 14), Math.sin(a) * (24 + rnd() * 14), 2601 + Math.floor(rnd() * 800));
+      }).flat(),
+      ...scatter(34, 2609, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 34;
+        const sz = 1.4 + rnd() * 1.4;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.2, sz, 0xe8eef2, rnd() * 3);
+      }),
+      ...scatter(24, 2617, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 18 + rnd() * 24;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 0.4, 4.5, 0.4, 0x6b5233);
+      }),
+    ],
+  },
+  {
+    id: "hydro",
+    name: "Hydro",
+    mp: true,
+    blurb: "A dam. Concrete on a scale that makes everything on it feel small.",
+    half: 54,
+    ground: 9080208,
+    sky: 8366020,
+    fog: 0.004,
+    light: 1.1,
+    start: [0, 39],
+    fires: [],
+    props: [
+      ...scatter(1, 2701, () => [
+        box(0, 0, 96, 9, 14, 0xb0b4b8),
+        box(0, -22, 96, 0.3, 26, 0x2f6a86),
+      ]).flat(),
+      ...storefront(-24, 20, 16, 13, 2709, Math.PI / 2),
+      ...storefront(24, 20, 16, 13, 2717, -Math.PI / 2),
+      ...scatter(32, 2719, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 30;
+        const sz = 1.3 + rnd() * 1.3;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.4, sz, 0x9aa0a6, rnd() * 3);
+      }),
+      ...scatter(18, 2729, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 16 + rnd() * 26;
+        const sz = 0.9 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 3, sz, 0x6b6f74, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "mirage",
+    name: "Mirage",
+    mp: true,
+    blurb: "A resort the desert is taking back. Half the rooms are full of sand.",
+    half: 50,
+    ground: 12888184,
+    sky: 14205850,
+    fog: 0.006,
+    light: 1.2,
+    start: [0, 36],
+    fires: [],
+    props: [
+      ...scatter(5, 2801, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        return house(Math.cos(a) * (22 + rnd() * 14), Math.sin(a) * (22 + rnd() * 14), 2801 + Math.floor(rnd() * 800));
+      }).flat(),
+      ...scatter(40, 2809, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 8 + rnd() * 34;
+        const sz = 1.6 + rnd() * 1.6;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.1, sz, 0xc9b28a, rnd() * 3);
+      }),
+      ...scatter(24, 2819, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 30;
+        const sz = 2.2 + rnd() * 2.2;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 2.4, sz, 0xb59a70, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    id: "magma",
+    name: "Magma",
+    lava: magmaLava,
+    mp: true,
+    blurb: "A town under a volcano. Lava through the streets, and it burns.",
+    half: 48,
+    ground: 4866104,
+    sky: 7027242,
+    fog: 0.006,
+    light: 0.95,
+    start: [0, 35],
+    fires: [],
+    props: [
+      ...scatter(5, 2901, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        return house(Math.cos(a) * (22 + rnd() * 12), Math.sin(a) * (22 + rnd() * 12), 2901 + Math.floor(rnd() * 800));
+      }).flat(),
+      ...lavaCrack(magmaLava, 0, 8, 22, 5, 0.1).flat(),
+      ...lavaCrack(magmaLava, -16, -14, 5, 18, 0.3).flat(),
+      ...lavaCrack(magmaLava, 18, -6, 5, 16, -0.4).flat(),
+      ...lavaCrack(magmaLava, 0, -30, 20, 5, 0).flat(),
+      ...scatter(32, 2909, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 30;
+        const sz = 1.2 + rnd() * 1.2;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 1.8, 1.1, sz, 0x5a5044, rnd() * 3);
       }),
     ],
   },
