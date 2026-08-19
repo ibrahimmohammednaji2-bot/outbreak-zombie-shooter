@@ -4924,12 +4924,17 @@ function updateGhosts(dt) {
 const STREAK_PER_KILL = 100;
 const SCORESTREAKS = [
   { id: "uav", name: "UAV", cost: 425, blurb: "Everyone on the minimap for 30 seconds." },
+  { id: "hunter", name: "Hunter Killer", cost: 525, blurb: "A drone that finds someone and goes into them." },
   { id: "package", name: "Care Package", cost: 550, blurb: "A crate. Whatever is in it is yours." },
+  { id: "counteruav", name: "Counter UAV", cost: 575, blurb: "Nobody else has a map for 30 seconds." },
+  { id: "guardian", name: "Guardian", cost: 650, blurb: "A cone of sound that slows and hurts whatever stands in it." },
+  { id: "warmachine", name: "War Machine", cost: 900, blurb: "Six grenades, in your hands, for twenty seconds." },
   { id: "sentry", name: "Sentry Gun", cost: 975, blurb: "A turret that holds a doorway until its ammunition runs out." },
+  { id: "warthog", name: "Warthog", cost: 1000, blurb: "Two strafing runs across the middle of the map." },
 ];
 const streakById = (id) => SCORESTREAKS.find((x) => x.id === id);
 
-const streaks = { points: 0, earned: [], uavUntil: 0 };
+const streaks = { points: 0, earned: [], uavUntil: 0, jamUntil: 0, hunters: [], guardians: [], runsLeft: 0, runAt: 0 };
 const uavUp = () => game.time < streaks.uavUntil;
 const sentries = [];
 
@@ -4969,6 +4974,34 @@ function useStreak() {
   if (id === "uav") {
     streaks.uavUntil = game.time + 30;
     banner("UAV UP", 1800);
+  } else if (id === "counteruav") {
+    /*
+     * The other side loses its map. The bots do not read a minimap, so what
+     * this actually does is take their sense of where you are away — which is
+     * the same thing from where they are standing.
+     */
+    streaks.jamUntil = game.time + 30;
+    for (const b of bots) b.blind = Math.max(b.blind ?? 0, 30);
+    banner("COUNTER UAV", 1800);
+  } else if (id === "hunter") {
+    launchHunter();
+    banner("HUNTER KILLER", 1600);
+  } else if (id === "guardian") {
+    placeGuardian();
+    banner("GUARDIAN DOWN", 1600);
+  } else if (id === "warmachine") {
+    const w = weaponById("m1216");
+    const slot = game.weapon;
+    game.slots[slot] = { id: "m1216", mag: 6, reserve: 0, fitted: { ...w, damage: w.damage * 3, name: "War Machine" } };
+    for (const vm of Object.values(viewmodels)) vm.visible = false;
+    viewmodels.m1216.visible = true;
+    renderLoadout();
+    syncHud();
+    banner("WAR MACHINE", 1600);
+  } else if (id === "warthog") {
+    streaks.runsLeft = 2;
+    streaks.runAt = game.time + 1.5;
+    banner("WARTHOG INBOUND", 2000);
   } else if (id === "package") {
     // whatever is in it is one of the others, free
     const gift = pick(SCORESTREAKS.filter((x) => x.id !== "package")).id;
@@ -4988,6 +5021,101 @@ function useStreak() {
  * until its ammunition is gone, and can be shot down — which is why it goes
  * in the same hitbox list everything else you can shoot is in.
  */
+/*
+ * A drone that picks whoever is nearest and flies into them. It is the
+ * cheapest thing on the list that actually kills somebody, which is why it
+ * costs barely more than a UAV.
+ */
+function launchHunter() {
+  const target = bots.filter((b) => b.alive).sort(
+    (a, b) => a.group.position.distanceTo(player.pos) - b.group.position.distanceTo(player.pos),
+  )[0];
+  if (!target) return;
+
+  const mesh = new THREE.Mesh(UNIT_BOX, new THREE.MeshBasicMaterial({ color: 0xff8a3a }));
+  mesh.scale.set(0.5, 0.25, 0.5);
+  mesh.position.copy(player.pos).add(new THREE.Vector3(0, 3, 0));
+  scene.add(mesh);
+  streaks.hunters.push({ mesh, target, life: 12 });
+}
+
+function updateHunters(dt) {
+  for (let i = streaks.hunters.length - 1; i >= 0; i--) {
+    const h = streaks.hunters[i];
+    h.life -= dt;
+    const to = h.target.group.position.clone().setY(h.target.y + 1.2);
+    const d = h.mesh.position.distanceTo(to);
+    h.mesh.position.lerp(to, Math.min(1, (dt * 14) / Math.max(1, d)));
+    h.mesh.rotation.y += dt * 12;
+
+    if (d < 1.4 || h.life <= 0 || !h.target.alive) {
+      if (d < 3) explode(h.mesh.position.clone(), 6, 200);
+      scene.remove(h.mesh);
+      h.mesh.material.dispose();
+      streaks.hunters.splice(i, 1);
+    }
+  }
+}
+
+/*
+ * A tripod that fires a cone of sound. Nothing in it dies quickly; everything
+ * in it slows to a crawl and takes damage the whole time, which is what makes
+ * it a door you cannot walk through rather than a gun.
+ */
+function placeGuardian() {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2a6ba0, emissive: 0x123a5a, emissiveIntensity: 0.8 });
+  const g = new THREE.Mesh(UNIT_BOX, mat);
+  g.scale.set(1.2, 1.4, 0.8);
+  g.position.copy(player.pos).setY(player.pos.y + 0.7);
+  camera.getWorldDirection(camDir);
+  g.rotation.y = Math.atan2(camDir.x, camDir.z);
+  scene.add(g);
+  streaks.guardians.push({
+    mesh: g,
+    dir: new THREE.Vector3(camDir.x, 0, camDir.z).normalize(),
+    life: 40,
+  });
+}
+
+function updateGuardians(dt) {
+  for (let i = streaks.guardians.length - 1; i >= 0; i--) {
+    const gd = streaks.guardians[i];
+    gd.life -= dt;
+    for (const b of bots) {
+      if (!b.alive) continue;
+      const to = b.group.position.clone().sub(gd.mesh.position);
+      to.y = 0;
+      const dist = to.length();
+      if (dist > 16) continue;
+      if (to.normalize().dot(gd.dir) < 0.72) continue; // outside the cone
+      b.slow = Math.max(b.slow ?? 0, 0.6);
+      damageBot(b, 24 * dt, false, camDir, b.group.position);
+    }
+    if (gd.life <= 0) {
+      scene.remove(gd.mesh);
+      streaks.guardians.splice(i, 1);
+    }
+  }
+}
+
+/* Two passes across the middle of the map, killing whatever is under them. */
+function updateWarthog(dt) {
+  void dt;
+  if (!streaks.runsLeft || game.time < streaks.runAt) return;
+  streaks.runsLeft--;
+  streaks.runAt = game.time + 4;
+
+  const a = Math.random() * Math.PI * 2;
+  const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  sfx.explosion();
+  for (let i = -1; i <= 1; i += 0.1) {
+    const at = dir.clone().multiplyScalar(i * HALF * 0.9);
+    at.y = 0;
+    explode(at, 7, 160);
+  }
+  banner(streaks.runsLeft ? "SECOND PASS" : "CLEAR", 1400);
+}
+
 function placeSentry() {
   const g = new THREE.Group();
   const metal = new THREE.MeshLambertMaterial({ color: 0x2f3438 });
@@ -6836,7 +6964,12 @@ function animate() {
     updateProjectiles(dt);
     updateThrowables(dt);
     updateDrops(dt);
-    if (game.dm) updateSentries(dt);
+    if (game.dm) {
+      updateSentries(dt);
+      updateHunters(dt);
+      updateGuardians(dt);
+      updateWarthog(dt);
+    }
     if (!game.dm) {
       updateBus(dt);
       updateFog(dt);
@@ -8539,8 +8672,14 @@ function startDeathmatch() {
   streaks.points = 0;
   streaks.earned.length = 0;
   streaks.uavUntil = 0;
+  streaks.jamUntil = 0;
+  streaks.runsLeft = 0;
   for (const s of sentries) scene.remove(s.group);
   sentries.length = 0;
+  for (const h of streaks.hunters) scene.remove(h.mesh);
+  streaks.hunters.length = 0;
+  for (const g of streaks.guardians) scene.remove(g.mesh);
+  streaks.guardians.length = 0;
 
   resetGame();
   clearBots();

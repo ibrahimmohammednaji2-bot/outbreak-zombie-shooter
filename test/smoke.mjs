@@ -1431,6 +1431,18 @@ const streaks = await page.evaluate(async () => {
   while (p.streaks.earned.length) p.useStreak();
   out.had = had;
   out.sentries = p.sentries.length;
+
+  // and every single one has to survive being called
+  let ok = 0;
+  for (const st of p.SCORESTREAKS) {
+    try {
+      p.streaks.earned = [st.id];
+      p.useStreak();
+      ok++;
+    } catch { /* counted by not incrementing */ }
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+  out.calledAll = ok;
   p.toLobby();
   return out;
 });
@@ -1439,6 +1451,8 @@ if (!streaks.earnedFirst.includes("uav")) note("five kills did not earn the UAV"
 if (!streaks.uav) note("calling the UAV did not put one up");
 if (!streaks.spent) note("calling a streak did not spend it");
 if (!streaks.sentries) note("the sentry gun was called but nothing was placed");
+if (streaks.calledAll !== streaks.costs.length)
+  note(`only ${streaks.calledAll} of ${streaks.costs.length} streaks could be called without throwing`);
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")
