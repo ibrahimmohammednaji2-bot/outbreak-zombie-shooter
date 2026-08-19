@@ -1705,3 +1705,22 @@ button.ghost:hover {
 /* the device question is asked before anything else, so it sits over the
    mode picker rather than under it */
 #device { z-index: 60; }
+
+/* what you have earned, and how far off the next one is */
+#streaks {
+  position: absolute;
+  left: 34px;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+#streaks b {
+  color: #5fd77a;
+  background: rgba(95, 215, 122, 0.12);
+  border-left: 3px solid #5fd77a;
+  padding: 4px 9px;
+}
+#streaks span { color: #93a599; padding-left: 3px; }

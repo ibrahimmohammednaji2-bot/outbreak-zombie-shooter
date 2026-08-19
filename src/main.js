@@ -4668,6 +4668,139 @@ function updateGhosts(dt) {
   }
 }
 
+/* ── scorestreaks ────────────────────────────────────────────── */
+
+/*
+ * Points, not kills: a hundred a kill, and you spend them on the three things
+ * below. Earned ones queue up and G uses the next, because a streak you have
+ * to go into a menu for is a streak you never call.
+ */
+const STREAK_PER_KILL = 100;
+const SCORESTREAKS = [
+  { id: "uav", name: "UAV", cost: 425, blurb: "Everyone on the minimap for 30 seconds." },
+  { id: "package", name: "Care Package", cost: 550, blurb: "A crate. Whatever is in it is yours." },
+  { id: "sentry", name: "Sentry Gun", cost: 975, blurb: "A turret that holds a doorway until its ammunition runs out." },
+];
+const streakById = (id) => SCORESTREAKS.find((x) => x.id === id);
+
+const streaks = { points: 0, earned: [], uavUntil: 0 };
+const uavUp = () => game.time < streaks.uavUntil;
+const sentries = [];
+
+function awardStreakPoints(n) {
+  if (!game.dm) return;
+  streaks.points += n;
+  for (const st of SCORESTREAKS) {
+    if (streaks.points >= st.cost && !streaks.earned.includes(st.id)) {
+      streaks.earned.push(st.id);
+      toast(`${st.name.toUpperCase()} READY — G`);
+      sfx.unlock();
+    }
+  }
+  renderStreakHud();
+}
+
+function renderStreakHud() {
+  const el = $("streaks");
+  if (!el) return;
+  const show = game.dm && game.running && !game.over;
+  el.classList.toggle("hidden", !show);
+  if (!show) return;
+  const next = SCORESTREAKS.find((st) => !streaks.earned.includes(st.id));
+  el.innerHTML =
+    streaks.earned.map((id) => `<b>${streakById(id).name}</b>`).join("") +
+    (next
+      ? `<span>${next.name} in ${Math.max(0, next.cost - streaks.points)}</span>`
+      : "");
+}
+
+/** Call the next one you have earned. */
+function useStreak() {
+  if (!game.dm || !streaks.earned.length) return;
+  const id = streaks.earned.shift();
+  const st = streakById(id);
+
+  if (id === "uav") {
+    streaks.uavUntil = game.time + 30;
+    banner("UAV UP", 1800);
+  } else if (id === "package") {
+    // whatever is in it is one of the others, free
+    const gift = pick(SCORESTREAKS.filter((x) => x.id !== "package")).id;
+    streaks.earned.push(gift);
+    banner("CARE PACKAGE", 1800);
+    toast(`IT IS A ${streakById(gift).name.toUpperCase()} — G AGAIN`);
+  } else if (id === "sentry") {
+    placeSentry();
+    banner("SENTRY OUT", 1800);
+  }
+  sfx.unlock();
+  renderStreakHud();
+}
+
+/*
+ * A turret dropped where you stand. It swings to whatever is nearest, fires
+ * until its ammunition is gone, and can be shot down — which is why it goes
+ * in the same hitbox list everything else you can shoot is in.
+ */
+function placeSentry() {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshLambertMaterial({ color: 0x2f3438 });
+  const legs = new THREE.Mesh(UNIT_CYL, metal);
+  legs.scale.set(0.5, 1.1, 0.5);
+  legs.position.y = 0.55;
+  g.add(legs);
+  const head = new THREE.Mesh(UNIT_BOX, metal);
+  head.scale.set(0.8, 0.5, 1.1);
+  head.position.y = 1.3;
+  g.add(head);
+
+  const at = player.pos.clone();
+  g.position.set(at.x, at.y, at.z);
+  scene.add(g);
+
+  const sentry = { group: g, head, ammo: 60, cd: 0, y: at.y, hp: 120 };
+  head.userData.sentry = sentry;
+  hitboxes.push(head);
+  sentries.push(sentry);
+}
+
+function updateSentries(dt) {
+  for (let i = sentries.length - 1; i >= 0; i--) {
+    const s = sentries[i];
+    let best = null;
+    let bestD = 34;
+    for (const b of bots) {
+      if (!b.alive) continue;
+      const d = b.group.position.distanceTo(s.group.position);
+      if (d < bestD) { bestD = d; best = b; }
+    }
+
+    if (best) {
+      const dx = best.group.position.x - s.group.position.x;
+      const dz = best.group.position.z - s.group.position.z;
+      s.head.rotation.y = Math.atan2(dx, dz);
+      s.cd -= dt;
+      if (s.cd <= 0 && s.ammo > 0) {
+        s.cd = 0.14;
+        s.ammo--;
+        sfx.shot({ tone: 420, volume: 0.4 });
+        tracer(
+          new THREE.Vector3(s.group.position.x, s.y + 1.3, s.group.position.z),
+          best.group.position.clone().setY(best.y + 1.2),
+        );
+        damageBot(best, 16, false, camDir, best.group.position);
+      }
+    }
+
+    if (s.ammo <= 0 || s.hp <= 0) {
+      scene.remove(s.group);
+      const h = hitboxes.indexOf(s.head);
+      if (h !== -1) hitboxes.splice(h, 1);
+      sentries.splice(i, 1);
+    }
+  }
+}
+
 const spotScratch = new THREE.Vector3();
 
 /** Is there room to stand something of this size here? */
@@ -5735,6 +5868,12 @@ function drawMinimap() {
     dot(z.group.position.x, z.group.position.z, boss ? "#ff9d3b" : "#ff4a4a", boss ? 4 : 2.6);
   }
   if (leroy.alive) dot(leroy.x, leroy.z, "#6fd3ff", 4);
+  // a UAV is the only thing that puts the other side on your map
+  if (game.dm && uavUp()) {
+    for (const b of bots) {
+      if (b.alive) dot(b.group.position.x, b.group.position.z, "#ff4a4a", 3);
+    }
+  }
 
   /*
    * And you, pointing the way you are looking. The dial is fixed, so this is
@@ -6451,6 +6590,7 @@ function animate() {
     updateProjectiles(dt);
     updateThrowables(dt);
     updateDrops(dt);
+    if (game.dm) updateSentries(dt);
     if (!game.dm) {
       updateBus(dt);
       updateFog(dt);
@@ -6586,6 +6726,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyF") useBox();
   // the bank is the one thing with two answers, so it gets two keys
   if (e.code === "KeyC" && nearThing?.kind === "bank") useBank(true);
+  if (e.code === "KeyG") useStreak();
   if (e.code === "KeyZ") throwEquipment(true);
   if (e.code === "KeyX") throwEquipment(false);
   if (e.code === "Space" && player.grounded) {
@@ -7961,6 +8102,7 @@ function killBot(bot, byPlayer) {
   }
   if (byPlayer) {
     game.score++;
+    awardStreakPoints(STREAK_PER_KILL);
     game.kills++;
     addPoints(PTS_KILL);
     sfx.kill?.() ?? sfx.unlock();
@@ -8148,6 +8290,11 @@ function startDeathmatch() {
   // and on a map built for it, not on one built to run a horde around
   if (!mapById(game.mapId).mp) game.mapId = MP_MAPS[0].id;
   game.score = 0;
+  streaks.points = 0;
+  streaks.earned.length = 0;
+  streaks.uavUntil = 0;
+  for (const s of sentries) scene.remove(s.group);
+  sentries.length = 0;
 
   resetGame();
   clearBots();
@@ -8864,6 +9011,12 @@ if (import.meta.env.DEV) {
     MAPS,
     ZOMBIE_MAPS,
     MP_MAPS,
+    streaks,
+    SCORESTREAKS,
+    useStreak,
+    awardStreakPoints,
+    uavUp,
+    sentries,
     mapById,
     WEAPONS,
     aim,

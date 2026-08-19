@@ -1409,6 +1409,37 @@ if (!modes.zombieLobbyHidden) note("the zombies menu is still up behind multipla
 if (!modes.zombieMapOk) note(`picking zombies left the map on ${modes.afterZombies}, a multiplayer map`);
 if (!modes.mpLobbyHidden) note("the multiplayer lobby is still up behind zombies");
 
+// ── scorestreaks ──
+step("scorestreaks are earned and can be called")
+const streaks = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "nuketown";
+  p.startDeathmatch();
+  const out = { costs: p.SCORESTREAKS.map((s) => s.cost) };
+
+  // a hundred a kill, so four hundred and twenty five is five kills
+  for (let i = 0; i < 5; i++) p.awardStreakPoints(100);
+  out.earnedFirst = [...p.streaks.earned];
+
+  p.useStreak();
+  out.uav = p.uavUp();
+  out.spent = p.streaks.earned.length === 0;
+
+  // enough for the sentry, then call it and see it exist
+  p.awardStreakPoints(1000);
+  const had = [...p.streaks.earned];
+  while (p.streaks.earned.length) p.useStreak();
+  out.had = had;
+  out.sentries = p.sentries.length;
+  p.toLobby();
+  return out;
+});
+step(`  ${streaks.costs.join(", ")} points; earned ${streaks.had.join(", ")}`);
+if (!streaks.earnedFirst.includes("uav")) note("five kills did not earn the UAV");
+if (!streaks.uav) note("calling the UAV did not put one up");
+if (!streaks.spent) note("calling a streak did not spend it");
+if (!streaks.sentries) note("the sentry gun was called but nothing was placed");
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {
