@@ -563,6 +563,9 @@ const dm = await page.evaluate(() => {
     pack: p.packMachines.length,
     bank: p.bankTellers.length,
     running: p.game.running,
+    zombieHud: ["points-label", "wave-label", "remaining-label"]
+      .filter((id) => !document.getElementById(id).classList.contains("hidden"))
+      .join(", "),
   };
   p.toLobby();
   return out;
@@ -577,6 +580,8 @@ else {
   if (dm.wallGuns) note(`${dm.wallGuns} wall guns in a free-for-all`);
   if (dm.pack) note("a Pack-a-Punch in a free-for-all");
   if (dm.bank) note("a bank in a free-for-all");
+  // points, waves and how many are left mean nothing in a free-for-all
+  if (dm.zombieHud) note(`the zombies HUD is showing in a free-for-all: ${dm.zombieHud}`);
 }
 
 // ── the shop ──

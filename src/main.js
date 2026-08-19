@@ -7913,7 +7913,22 @@ function toLobby() {
 }
 
 // ── start / restart ──────────────────────────────────────────────
+/*
+ * Points, waves and how many are left are zombies ideas. A free-for-all has
+ * none of them — nothing to buy, no wave to clear, nothing left to count — so
+ * the row goes rather than sitting there reading zero.
+ *
+ * Set when a match starts rather than inside syncHud, which runs several times
+ * a frame and is not the place to be touching the DOM.
+ */
+function setHudForMode() {
+  for (const id of ["points-label", "wave-label", "remaining-label"]) {
+    $(id)?.classList.toggle("hidden", game.dm);
+  }
+}
+
 function beginPlay() {
+  setHudForMode();
   ui.lobby.classList.add("hidden");
   ui.pause.classList.add("hidden");
   ui.dead.classList.add("hidden");
