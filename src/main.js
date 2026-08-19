@@ -2674,6 +2674,168 @@ const MAPS = [
       }),
     ],
   },
+  {
+    /*
+     * Slums. A packed neighbourhood: small concrete houses shoulder to
+     * shoulder, alleys between them barely wide enough to pass, and one open
+     * square in the middle that everything funnels into.
+     */
+    id: "slums",
+    name: "Slums",
+    mp: true,
+    blurb: "Narrow alleys, packed houses, and one open square everything funnels into.",
+    half: 46,
+    ground: 0x6b6152,
+    sky: 0x8a9099,
+    fog: 0.0045,
+    light: 1.05,
+    start: [0, 34],
+    fires: [[0, 0]],
+    props: [
+      // the ring of houses, shoulder to shoulder
+      ...scatter(9, 1301, (rnd) => {
+        const a = (rnd() * Math.PI * 2);
+        const d = 24 + rnd() * 12;
+        return house(Math.cos(a) * d, Math.sin(a) * d, 1300 + Math.floor(rnd() * 900));
+      }).flat(),
+      // market stalls and awnings round the square
+      ...scatter(16, 1307, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 8 + rnd() * 8;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        return [
+          box(x, z, 3.2, 0.9, 2, 0x8a5a3a, rnd() * 3),
+          { ...box(x, z, 3.6, 0.2, 2.4, 0xb84a3a, rnd() * 3, 2.4), clip: false },
+        ];
+      }).flat(),
+      // low walls and rubble making the alleys
+      ...scatter(40, 1311, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 12 + rnd() * 26;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 4, 2, 0.6, 0x7a7060, a);
+      }),
+      ...scatter(22, 1313, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 30;
+        const sz = 0.8 + rnd() * 0.8;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    /*
+     * Standoff. A small border town: a road through the middle, a garage at
+     * one end, shops down both sides, and enough open ground between them
+     * that crossing it is a decision.
+     */
+    id: "standoff",
+    name: "Standoff",
+    mp: true,
+    blurb: "A rural border town. A road through the middle and open ground you have to cross.",
+    half: 50,
+    ground: 0x7a6f57,
+    sky: 0x9aa3ad,
+    fog: 0.004,
+    light: 1.1,
+    start: [0, 38],
+    fires: [],
+    props: [
+      ...storefront(-22, 14, 16, 13, 1401, Math.PI / 2),
+      ...storefront(-22, -12, 15, 12, 1409, Math.PI / 2),
+      ...storefront(22, 12, 16, 13, 1417, -Math.PI / 2),
+      ...storefront(22, -14, 15, 12, 1423, -Math.PI / 2),
+      ...house(0, -34, 1429),
+      // the garage at the top of the road
+      ...scatter(1, 1433, () => [
+        box(0, 34, 18, 5, 12, 0x8d8272),
+        { ...box(0, 28.2, 18, 0.6, 4, 0x6b6d72, 0, 5), clip: false },
+      ]).flat(),
+      // vehicles and fences down the street
+      ...scatter(10, 1439, (rnd) => {
+        const side = rnd() > 0.5 ? 1 : -1;
+        return box(side * (7 + rnd() * 3), (rnd() - 0.5) * 50, 4.4, 1.5, 2, pickR([0x3f4a48, 0x53433a, 0x2f5a86], rnd), rnd() * 0.6);
+      }),
+      ...scatter(34, 1447, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 30 + rnd() * 14;
+        if (rnd() > 0.8) return [];
+        return box(Math.cos(a) * d, Math.sin(a) * d, 2.8, 1.5, 0.2, 0x6b5233, a + Math.PI / 2);
+      }).flat(),
+      ...scatter(16, 1451, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 26;
+        const sz = 0.9 + rnd() * 0.9;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz * 2, sz * 0.8, sz, 0x6f665b, rnd() * 3);
+      }),
+    ],
+  },
+  {
+    /*
+     * Hijacked. A yacht: long and narrow, so the fight is always front to
+     * back. Rooms and a corridor down the middle, open deck at both ends, and
+     * water all round it that you cannot leave by.
+     */
+    id: "hijacked",
+    name: "Hijacked",
+    mp: true,
+    blurb: "A luxury yacht. Long, narrow, and the fight is always front to back.",
+    half: 40,
+    ground: 0x2a4258,
+    sky: 0x7fa7c4,
+    fog: 0.003,
+    light: 1.2,
+    start: [0, 26],
+    fires: [],
+    props: [
+      // the hull: a long deck with a rail all the way round
+      ...scatter(1, 1501, () => {
+        const out = [box(0, 0, 22, 1, 60, 0xd8d2c4)];
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 20; i++) {
+            out.push(box(side * 11, -29 + i * 3, 0.4, 1.1, 0.4, 0xb0a894, 0, 1));
+          }
+        }
+        // the pointed bow
+        out.push(box(0, 32, 14, 1, 8, 0xd8d2c4, 0.0));
+        return out;
+      }).flat(),
+      // the cabin block down the middle, with a corridor through it
+      ...scatter(1, 1509, () => {
+        const out = [];
+        for (const side of [-1, 1]) {
+          out.push(box(side * 7.5, 0, 0.5, 3.2, 34, 0xe4ded0, 0, 1));
+        }
+        out.push(box(0, -17.5, 15.5, 3.2, 0.5, 0xe4ded0, 0, 1));
+        // upper deck over the back half, reached from the sides
+        out.push({ ...box(0, -8, 15, 0.4, 20, 0xd8d2c4, 0, 4.2), clip: true });
+        for (let i = 0; i < 8; i++) {
+          out.push(box(9.5, -18 + i * 1.1, 2.4, (4.2 / 8) * (i + 1), 1.15, 0xd8d2c4));
+        }
+        return out;
+      }).flat(),
+      // furniture on the deck, and the pool at the back
+      ...scatter(14, 1511, (rnd) => {
+        const x = (rnd() - 0.5) * 18;
+        const z = (rnd() - 0.5) * 52;
+        return box(x, z, 1.6, 0.7, 1.6, rnd() > 0.5 ? 0xb9a37a : 0x8a8070, rnd() * 3);
+      }),
+      ...scatter(1, 1517, () => [box(0, -24, 9, 0.3, 7, 0x3f8fc4)]).flat(),
+      // railings, crates, loungers and lifebuoys — a yacht built from four
+      // big pieces reads as a floor, not a place to fight on
+      ...scatter(46, 1523, (rnd) => {
+        const x = (rnd() - 0.5) * 19;
+        const z = (rnd() - 0.5) * 56;
+        const sz = 0.6 + rnd() * 0.9;
+        return box(x, z, sz, sz * 1.2, sz, rnd() > 0.5 ? 0xc9c2b2 : 0x9a9484, rnd() * 3, 1);
+      }),
+      ...scatter(20, 1531, (rnd) => {
+        const side = rnd() > 0.5 ? 1 : -1;
+        const z = (rnd() - 0.5) * 50;
+        return box(side * 9, z, 0.5, 1.4, 2.4, 0xe4ded0, 0, 1);
+      }),
+    ],
+  },
 ];
 
 /*

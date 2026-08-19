@@ -1367,6 +1367,17 @@ if (!split.mp.length) note("there are no multiplayer maps");
 if (!split.dmIsMp) note(`a free-for-all started on ${split.dmMap}, which is not a multiplayer map`);
 if (split.props < 150) note(`Nuketown only has ${split.props} solid props`);
 
+// every multiplayer map has to build and be worth walking about in
+for (const id of split.mp) {
+  const built = await page.evaluate((mid) => {
+    const p = window.__probe;
+    p.game.mapId = mid;
+    p.resetGame();
+    return { props: p.obstacles.length, start: p.MAPS.find((m) => m.id === mid).start };
+  }, id);
+  if (built.props < 120) note(`${id} only has ${built.props} solid props`);
+}
+
 /*
  * The two sides never share a screen after the picker, and the map cannot
  * follow you across. Starting zombies straight after a free-for-all used to
