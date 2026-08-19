@@ -2609,8 +2609,81 @@ const MAPS = [
       })),
     ],
   },
+  {
+    /*
+     * Nuketown. Two houses facing each other across a road, and that is the
+     * whole map — you can walk it end to end in fifteen seconds, which is why
+     * it plays the way it does. Multiplayer only: there is nowhere to run to,
+     * so a horde would simply corner you.
+     */
+    id: "nuketown",
+    name: "Nuketown",
+    mp: true,
+    blurb: "Two houses, one road, and nowhere to hide. Small and fast.",
+    half: 34,
+    ground: 0x8a7f66,
+    sky: 0x6f7f96,
+    fog: 0.004,
+    light: 1.15,
+    start: [0, 24],
+    fires: [],
+    props: [
+      // the two houses, facing each other down the road
+      ...house(-19, -15, 1201),
+      ...house(19, 15, 1213),
+
+      // the road itself, and the kerbs either side
+      ...scatter(18, 1217, (rnd) => {
+        const t = rnd();
+        return box((t - 0.5) * 56, (t - 0.5) * 56, 2.6, 0.12, 6, 0x4a4640, 0.79);
+      }),
+      // the two cars parked in the middle, which everyone fights over
+      ...scatter(2, 1223, (rnd) => {
+        const side = rnd() > 0.5 ? 1 : -1;
+        const x = side * 5;
+        const z = -side * 4;
+        return [
+          box(x, z, 4.6, 1.5, 2.1, rnd() > 0.5 ? 0xc4a02a : 0x2f5a86, 0.8),
+          { ...cyl(x + 1.6, z + 1, 0.7, 0.7, 0.4, 0x2a2622, 0.35), clip: false },
+          { ...cyl(x - 1.6, z - 1, 0.7, 0.7, 0.4, 0x2a2622, 0.35), clip: false },
+        ];
+      }).flat(),
+      // the bus at one end, the mannequins, and the fences round the edge
+      ...scatter(1, 1229, () => [
+        box(-24, 20, 9, 3.4, 3, 0xc9a227, 0.6),
+        box(24, -20, 4.6, 1.6, 2.2, 0x8a3a2a, 0.6),
+      ]).flat(),
+      ...scatter(14, 1231, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 10 + rnd() * 18;
+        return box(Math.cos(a) * d, Math.sin(a) * d, 0.4, 1.8, 0.4, 0xb0a894);
+      }),
+      // picket fences round the two gardens
+      ...scatter(46, 1237, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 26 + rnd() * 5;
+        if (rnd() > 0.82) return [];
+        return box(Math.cos(a) * d, Math.sin(a) * d, 2.6, 1.5, 0.16, 0x9a8f76, a + Math.PI / 2);
+      }).flat(),
+      // and a few crates and bins for cover in the open middle
+      ...scatter(12, 1241, (rnd) => {
+        const a = rnd() * Math.PI * 2;
+        const d = 6 + rnd() * 16;
+        const sz = 0.9 + rnd() * 0.7;
+        return box(Math.cos(a) * d, Math.sin(a) * d, sz, sz, sz, CRATE, rnd() * 3);
+      }),
+    ],
+  },
 ];
 
+/*
+ * The two sides do not share maps. A zombies map needs somewhere to run a
+ * horde in circles; a multiplayer map wants to be small enough to find people
+ * in. Nuketown would corner you in a wave and the Bus route would be an empty
+ * field with two players in it.
+ */
+const ZOMBIE_MAPS = MAPS.filter((m) => !m.mp);
+const MP_MAPS = MAPS.filter((m) => m.mp);
 const mapById = (id) => MAPS.find((m) => m.id === id) ?? MAPS[0];
 
 function groundTexture(hex) {
@@ -7000,7 +7073,7 @@ function renderPanel() {
 
     <div class="panel-label">MAP</div>
     <div class="opt-grid">
-      ${MAPS.map(
+      ${(game.dm ? MP_MAPS : ZOMBIE_MAPS).map(
         (m) => `<button class="opt ${m.id === game.mapId ? "on" : ""}" data-map="${m.id}">
           <span class="t">${m.name}</span><span class="d">${m.blurb}</span></button>`,
       ).join("")}
@@ -7865,6 +7938,8 @@ function startDeathmatch() {
   console.log("[zombie attack] starting free-for-all");
   const c = mpClasses[mpIndex];
   game.dm = true;
+  // and on a map built for it, not on one built to run a horde around
+  if (!mapById(game.mapId).mp) game.mapId = MP_MAPS[0].id;
   game.score = 0;
 
   resetGame();
@@ -8580,6 +8655,8 @@ if (import.meta.env.DEV) {
     lure,
     lureActive,
     MAPS,
+    ZOMBIE_MAPS,
+    MP_MAPS,
     WEAPONS,
     aim,
     aiming,

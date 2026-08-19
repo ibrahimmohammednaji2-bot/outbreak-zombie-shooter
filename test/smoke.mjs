@@ -1333,6 +1333,34 @@ if (!lobby.toClass) note("create a class did not open the class screen");
 if (!lobby.backToLobby) note("backing out of the class screen did not return to the lobby");
 if (!lobby.closed) note("the lobby would not close");
 
+/*
+ * The two sides keep their own maps. A zombies map needs somewhere to run a
+ * horde in circles; a multiplayer map wants to be small enough to find people
+ * in. Neither list may leak into the other.
+ */
+step("multiplayer and zombies have separate maps")
+const split = await page.evaluate(() => {
+  const p = window.__probe;
+  const out = {
+    zombie: p.ZOMBIE_MAPS.map((m) => m.id),
+    mp: p.MP_MAPS.map((m) => m.id),
+    leaked: p.ZOMBIE_MAPS.filter((m) => m.mp).map((m) => m.id),
+  };
+  // a free-for-all must land on a multiplayer map whatever was picked before
+  p.game.mapId = "forest";
+  p.startDeathmatch();
+  out.dmMap = p.game.mapId;
+  out.dmIsMp = p.MP_MAPS.some((m) => m.id === p.game.mapId);
+  out.props = p.obstacles.length;
+  p.toLobby();
+  return out;
+});
+step(`  zombies: ${split.zombie.join(", ")} · multiplayer: ${split.mp.join(", ")}`);
+if (split.leaked.length) note(`${split.leaked.join(", ")} is offered to zombies and should not be`);
+if (!split.mp.length) note("there are no multiplayer maps");
+if (!split.dmIsMp) note(`a free-for-all started on ${split.dmMap}, which is not a multiplayer map`);
+if (split.props < 150) note(`Nuketown only has ${split.props} solid props`);
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {
