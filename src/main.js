@@ -7173,6 +7173,37 @@ setInterval(() => {
 
 addEventListener("beforeunload", () => leaveParty());
 
+/*
+ * Which of the two games you are in. The picker is the first thing you see and
+ * the two sides never share a screen again after it — a lobby that has to
+ * serve both ends up serving neither, which is what the old one was doing with
+ * multiplayer hung off a button inside the zombies menu.
+ */
+function pickMode(which) {
+  $("mode-pick").classList.add("hidden");
+  if (which === "mp") {
+    game.dm = false; // not started yet, but this is the multiplayer side
+    ui.lobby.classList.add("hidden");
+    openMultiplayer();
+  } else {
+    if (mapById(game.mapId).mp) game.mapId = ZOMBIE_MAPS[0].id;
+    $("mplobby").classList.add("hidden");
+    ui.lobby.classList.remove("hidden");
+    renderPanel();
+  }
+}
+
+function showModePick() {
+  $("mode-pick").classList.remove("hidden");
+  $("mplobby").classList.add("hidden");
+  ui.lobby.classList.add("hidden");
+}
+
+$("mode-pick").addEventListener("click", (e) => {
+  const card = e.target.closest("[data-mode]");
+  if (card) pickMode(card.dataset.mode);
+});
+
 function toLobby() {
   inLobby = true;
   if (game.dm) { clearBots(); game.dm = false; }
@@ -7186,7 +7217,15 @@ function toLobby() {
   ui.hud.classList.add("hidden");
   ui.pause.classList.add("hidden");
   ui.dead.classList.add("hidden");
-  ui.lobby.classList.remove("hidden");
+  // back to whichever of the two you came from
+  const wasMp = game.dm || mapById(game.mapId).mp;
+  if (wasMp) {
+    ui.lobby.classList.add("hidden");
+    renderMpLobby();
+    $("mplobby").classList.remove("hidden");
+  } else {
+    ui.lobby.classList.remove("hidden");
+  }
   $("power-btn").classList.add("hidden");
   renderPanel();
 }
@@ -7287,6 +7326,12 @@ function endGame() {
 }
 
 $("play-btn").addEventListener("click", () => {
+  /*
+   * A free-for-all leaves game.mapId pointing at a multiplayer map, and
+   * starting zombies afterwards took it at its word — which is how Nuketown
+   * ended up hosting a horde. The map belongs to the mode being started.
+   */
+  if (mapById(game.mapId).mp) game.mapId = ZOMBIE_MAPS[0].id;
   resetGame();
   beginPlay();
 });
@@ -7535,7 +7580,7 @@ $("mplobby").addEventListener("click", (e) => {
   }
 });
 
-$("mpl-back").addEventListener("click", () => $("mplobby").classList.add("hidden"));
+$("mpl-back").addEventListener("click", showModePick);
 
 $("mp-back").addEventListener("click", () => {
   // back out of the class screen into the lobby it was opened from
@@ -8657,6 +8702,7 @@ if (import.meta.env.DEV) {
     MAPS,
     ZOMBIE_MAPS,
     MP_MAPS,
+    mapById,
     WEAPONS,
     aim,
     aiming,
@@ -8670,6 +8716,8 @@ if (import.meta.env.DEV) {
     startDeathmatch,
     toLobby,
     openMultiplayer,
+    pickMode,
+    showModePick,
     beginPlay,
   };
 }

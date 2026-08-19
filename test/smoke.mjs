@@ -87,6 +87,12 @@ await page.evaluate(() => {
   if (b) b.click();
 });
 
+step("pick zombies from the mode screen");
+await page.evaluate(() => {
+  const z = document.querySelector('#mode-pick [data-mode="zombies"]');
+  if (z) z.click();
+});
+
 step("start a game");
 await page.evaluate(() => document.getElementById("play-btn").click());
 await until("wave 1", () => window.__probe.game.running && window.__probe.game.wave === 1);
@@ -1360,6 +1366,37 @@ if (split.leaked.length) note(`${split.leaked.join(", ")} is offered to zombies 
 if (!split.mp.length) note("there are no multiplayer maps");
 if (!split.dmIsMp) note(`a free-for-all started on ${split.dmMap}, which is not a multiplayer map`);
 if (split.props < 150) note(`Nuketown only has ${split.props} solid props`);
+
+/*
+ * The two sides never share a screen after the picker, and the map cannot
+ * follow you across. Starting zombies straight after a free-for-all used to
+ * host a horde on Nuketown.
+ */
+step("the mode picker keeps the two games apart")
+const modes = await page.evaluate(() => {
+  const p = window.__probe;
+  p.toLobby();
+
+  p.showModePick();
+  const out = { pickerUp: !document.getElementById("mode-pick").classList.contains("hidden") };
+
+  p.pickMode("mp");
+  out.mpLobby = !document.getElementById("mplobby").classList.contains("hidden");
+  out.zombieLobbyHidden = document.getElementById("lobby").classList.contains("hidden");
+
+  // a free-for-all leaves the map on Nuketown; zombies must not inherit it
+  p.game.mapId = "nuketown";
+  p.pickMode("zombies");
+  out.afterZombies = p.game.mapId;
+  out.zombieMapOk = !p.mapById(p.game.mapId).mp;
+  out.mpLobbyHidden = document.getElementById("mplobby").classList.contains("hidden");
+  return out;
+});
+if (!modes.pickerUp) note("the mode picker does not show");
+if (!modes.mpLobby) note("picking multiplayer did not open its lobby");
+if (!modes.zombieLobbyHidden) note("the zombies menu is still up behind multiplayer");
+if (!modes.zombieMapOk) note(`picking zombies left the map on ${modes.afterZombies}, a multiplayer map`);
+if (!modes.mpLobbyHidden) note("the multiplayer lobby is still up behind zombies");
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")

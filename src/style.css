@@ -1667,3 +1667,41 @@ button.ghost:hover {
   cursor: pointer;
 }
 .mpl-back:hover { border-color: #fff; color: #fff; }
+
+/* ── the mode picker, before anything else ─────────────────────── */
+#mode-pick {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: radial-gradient(ellipse at center, #0d1710, #04060a 70%);
+}
+.mode-title { font-size: 54px; font-weight: 800; letter-spacing: 12px; }
+.mode-sub { color: #7d8c80; letter-spacing: 3px; margin-bottom: 34px; }
+.mode-row { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.mode-card {
+  width: 300px;
+  padding: 30px 26px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mode-card:hover, .mode-card:focus-visible {
+  border-color: var(--accent);
+  background: rgba(127, 209, 185, 0.08);
+}
+.mode-card b { display: block; font-size: 22px; letter-spacing: 4px; margin-bottom: 10px; }
+.mode-card span { color: #93a599; font-size: 14px; line-height: 1.55; }
+
+/* the device question is asked before anything else, so it sits over the
+   mode picker rather than under it */
+#device { z-index: 60; }
