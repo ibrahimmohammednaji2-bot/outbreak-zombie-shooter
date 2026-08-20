@@ -5201,6 +5201,83 @@ const SCORESTREAKS = [
 ];
 const streakById = (id) => SCORESTREAKS.find((x) => x.id === id);
 
+/*
+ * You take three of them into a match and no more.
+ *
+ * That is the whole shape of the decision: a UAV every few kills, or nothing
+ * until something that ends a round. Being able to earn all eight would make
+ * the cheap ones free and the expensive ones pointless, because you would
+ * always be handed the cheap one first anyway.
+ */
+const STREAK_SLOTS = 3;
+const chosenStreaks = readChosenStreaks();
+
+function readChosenStreaks() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("za:streaks") ?? "null");
+    if (Array.isArray(raw) && raw.length === STREAK_SLOTS && raw.every(streakById)) return raw;
+  } catch {
+    /* fall through to the default three */
+  }
+  return ["uav", "package", "sentry"];
+}
+
+function saveChosenStreaks() {
+  try {
+    localStorage.setItem("za:streaks", JSON.stringify(chosenStreaks));
+  } catch {
+    /* private browsing */
+  }
+}
+
+/** Tap one to take it or drop it, three at a time. */
+function toggleStreak(id) {
+  const at = chosenStreaks.indexOf(id);
+  if (at !== -1) {
+    chosenStreaks.splice(at, 1);
+  } else if (chosenStreaks.length < STREAK_SLOTS) {
+    chosenStreaks.push(id);
+  } else {
+    // full: the new one takes the place of the one you have had longest
+    chosenStreaks.shift();
+    chosenStreaks.push(id);
+  }
+  chosenStreaks.sort((a, b) => streakById(a).cost - streakById(b).cost);
+  saveChosenStreaks();
+  renderStreakPicker();
+}
+
+function renderStreakPicker() {
+  const el = $("streak-pick");
+  if (!el) return;
+  el.innerHTML = `
+    <h2>SCORESTREAKS</h2>
+    <p class="sub">Three of them. A hundred points a kill.</p>
+    <div class="streak-grid">
+      ${SCORESTREAKS.map((st) => {
+        const on = chosenStreaks.includes(st.id);
+        return `<button class="streak-card ${on ? "on" : ""}" data-streak="${st.id}">
+          <b>${st.name}</b>
+          <span class="cost">${st.cost}</span>
+          <span class="blurb">${st.blurb}</span>
+        </button>`;
+      }).join("")}
+    </div>
+    <div class="streak-foot">
+      <span>${chosenStreaks.length} of ${STREAK_SLOTS} chosen</span>
+      <button class="ghost" id="streak-close">DONE</button>
+    </div>`;
+}
+
+$("streak-pick").addEventListener("click", (e) => {
+  if (e.target.closest("#streak-close")) {
+    $("streak-pick").classList.add("hidden");
+    return;
+  }
+  const card = e.target.closest("[data-streak]");
+  if (card) toggleStreak(card.dataset.streak);
+});
+
 const streaks = { points: 0, earned: [], uavUntil: 0, jamUntil: 0, hunters: [], guardians: [], runsLeft: 0, runAt: 0 };
 const uavUp = () => game.time < streaks.uavUntil;
 const sentries = [];
@@ -5209,6 +5286,7 @@ function awardStreakPoints(n) {
   if (!game.dm) return;
   streaks.points += n;
   for (const st of SCORESTREAKS) {
+    if (!chosenStreaks.includes(st.id)) continue; // you did not bring this one
     if (streaks.points >= st.cost && !streaks.earned.includes(st.id)) {
       streaks.earned.push(st.id);
       toast(`${st.name.toUpperCase()} READY — G`);
@@ -5224,7 +5302,7 @@ function renderStreakHud() {
   const show = game.dm && game.running && !game.over;
   el.classList.toggle("hidden", !show);
   if (!show) return;
-  const next = SCORESTREAKS.find((st) => !streaks.earned.includes(st.id));
+  const next = chosenStreaks.map(streakById).find((st) => !streaks.earned.includes(st.id));
   el.innerHTML =
     streaks.earned.map((id) => `<b>${streakById(id).name}</b>`).join("") +
     (next
@@ -5271,7 +5349,7 @@ function useStreak() {
     banner("WARTHOG INBOUND", 2000);
   } else if (id === "package") {
     // whatever is in it is one of the others, free
-    const gift = pick(SCORESTREAKS.filter((x) => x.id !== "package")).id;
+    const gift = pick(chosenStreaks.filter((x) => x !== "package")) ?? "uav";
     streaks.earned.push(gift);
     banner("CARE PACKAGE", 1800);
     toast(`IT IS A ${streakById(gift).name.toUpperCase()} — G AGAIN`);
@@ -8537,10 +8615,12 @@ $("mplobby").addEventListener("click", (e) => {
     $("lobby-panel").classList.remove("hidden");
   } else {
     // bots and scorestreaks are not built yet, and saying so beats a dead click
-    $("mpl-hint").textContent =
-      what === "bots"
-        ? "Bots fill the match already. Choosing how many is not built yet."
-        : "Scorestreaks are not built yet.";
+    if (what === "streaks") {
+      renderStreakPicker();
+      $("streak-pick").classList.remove("hidden");
+    } else {
+      $("mpl-hint").textContent = "Bots fill the match already. Choosing how many is not built yet.";
+    }
   }
 });
 
@@ -9680,6 +9760,9 @@ if (import.meta.env.DEV) {
     MP_MAPS,
     streaks,
     SCORESTREAKS,
+    chosenStreaks,
+    toggleStreak,
+    STREAK_SLOTS,
     useStreak,
     awardStreakPoints,
     uavUp,

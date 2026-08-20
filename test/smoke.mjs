@@ -1459,6 +1459,39 @@ if (!streaks.sentries) note("the sentry gun was called but nothing was placed");
 if (streaks.calledAll !== streaks.costs.length)
   note(`only ${streaks.calledAll} of ${streaks.costs.length} streaks could be called without throwing`);
 
+/*
+ * You take three streaks into a match and no more. Earning all of them would
+ * make the cheap ones free and the expensive ones pointless.
+ */
+step("only three scorestreaks can be taken into a match")
+const picked = await page.evaluate(async () => {
+  const p = window.__probe;
+  const out = { slots: p.STREAK_SLOTS, all: p.SCORESTREAKS.length };
+
+  // take every one of them in turn; it must never hold more than three
+  let overfilled = false;
+  for (const st of p.SCORESTREAKS) {
+    p.toggleStreak(st.id);
+    if (p.chosenStreaks.length > p.STREAK_SLOTS) overfilled = true;
+  }
+  out.overfilled = overfilled;
+  out.held = [...p.chosenStreaks];
+
+  // and one you did not take must never be earned, however many points
+  p.chosenStreaks.length = 0;
+  p.chosenStreaks.push("uav");
+  p.game.mapId = "nuketown";
+  p.startDeathmatch();
+  p.awardStreakPoints(5000);
+  out.earned = [...p.streaks.earned];
+  p.toLobby();
+  return out;
+});
+step(`  ${picked.slots} of ${picked.all}, holding ${picked.held.join(", ")}`);
+if (picked.overfilled) note("more than three streaks could be taken at once");
+if (picked.earned.length !== 1 || picked.earned[0] !== "uav")
+  note(`five thousand points earned ${picked.earned.join(", ")} from a single chosen streak`);
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

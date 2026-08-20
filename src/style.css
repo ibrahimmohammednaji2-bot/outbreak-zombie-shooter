@@ -1724,3 +1724,31 @@ button.ghost:hover {
   padding: 4px 9px;
 }
 #streaks span { color: #93a599; padding-left: 3px; }
+
+/* choosing your three */
+#streak-pick {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: #05070c;
+  padding: 44px 56px;
+  overflow: auto;
+}
+#streak-pick h2 { font-size: 30px; letter-spacing: 6px; }
+#streak-pick .sub { color: #7d8c80; letter-spacing: 2px; margin-bottom: 24px; }
+.streak-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.streak-card {
+  text-align: left;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.streak-card.on { border-color: #5fd77a; background: rgba(95, 215, 122, 0.1); }
+.streak-card b { display: block; letter-spacing: 2px; }
+.streak-card .cost { color: #ffc94a; font-family: ui-monospace, monospace; font-size: 13px; }
+.streak-card .blurb { display: block; margin-top: 6px; color: #93a599; font-size: 12px; line-height: 1.5; }
+.streak-foot { display: flex; align-items: center; gap: 16px; margin-top: 24px; letter-spacing: 2px; color: #93a599; }
