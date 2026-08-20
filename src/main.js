@@ -1977,7 +1977,7 @@ const MAPS = [
     boxes: forestBoxes,
     marks: forestMarks,
     fires: [[-22, -20], [24, 18], [0, 30], [-26, 22]],
-    props: [
+    props: () => [
       ...house(0, 0, 91, forestBoxes, forestMarks),
 
       // Woodland grows in clumps with clearings between, not on a grid.
@@ -2057,7 +2057,7 @@ const MAPS = [
     marks: cityMarks,
     lava: townLava,
     fires: [[0, 0], [-34, -28], [36, 30], [-40, 34], [40, -32], [0, -54]],
-    props: [
+    props: () => [
       // the bank: the big building, and the one with a vault under it
       ...house(-30, 6, 3, cityBoxes, cityMarks),
       // the bar, and the rest of the street
@@ -2142,7 +2142,7 @@ const MAPS = [
     boxes: farmBoxes,
     marks: farmMarks,
     fires: [[-26, 22], [30, -18], [0, 8], [-34, -30]],
-    props: [
+    props: () => [
       // the farmhouse: two floors, the perks and the box
       ...house(-26, 20, 211, farmBoxes, farmMarks),
       // the barn across the yard, and the silo between them
@@ -2225,7 +2225,7 @@ const MAPS = [
       [0, 34], [0, 12], [0, -12], [0, -34],
       [-24, 4], [24, 30], [-6, -54], [50, -30], [0, 56],
     ],
-    props: [
+    props: () => [
       // ── the saloon: two floors, the perks, and the box upstairs ──
       ...house(30, 0, 401, townBoxes, townMarks),
 
@@ -2456,7 +2456,7 @@ const MAPS = [
     lava: transitLava,
     route: ROUTE,
     fires: [[0, 140], [-118, 34], [8, -12], [122, 40], [0, -140]],
-    props: [
+    props: () => [
       /* ── the depot, where you start ───────────────────────────── */
       ...storefront(0, 152, 22, 16, 601, Math.PI),
       ...storefront(-20, 138, 12, 10, 607, Math.PI / 2),
@@ -2628,7 +2628,7 @@ const MAPS = [
     light: 1.15,
     start: [0, 24],
     fires: [],
-    props: [
+    props: () => [
       // the two houses, facing each other down the road
       ...house(-19, -15, 1201),
       ...house(19, 15, 1213),
@@ -2692,7 +2692,7 @@ const MAPS = [
     light: 1.05,
     start: [0, 34],
     fires: [[0, 0]],
-    props: [
+    props: () => [
       // the ring of houses, shoulder to shoulder
       ...scatter(9, 1301, (rnd) => {
         const a = (rnd() * Math.PI * 2);
@@ -2741,7 +2741,7 @@ const MAPS = [
     light: 1.1,
     start: [0, 38],
     fires: [],
-    props: [
+    props: () => [
       ...storefront(-22, 14, 16, 13, 1401, Math.PI / 2),
       ...storefront(-22, -12, 15, 12, 1409, Math.PI / 2),
       ...storefront(22, 12, 16, 13, 1417, -Math.PI / 2),
@@ -2788,7 +2788,7 @@ const MAPS = [
     light: 1.2,
     start: [0, 26],
     fires: [],
-    props: [
+    props: () => [
       // the hull: a long deck with a rail all the way round
       ...scatter(1, 1501, () => {
         const out = [box(0, 0, 22, 1, 60, 0xd8d2c4)];
@@ -2849,7 +2849,7 @@ const MAPS = [
     light: 1.2,
     start: [0, 32],
     fires: [],
-    props: [
+    props: () => [
       ...house(0, -14, 1601),
       ...house(-26, 16, 1607),
       ...house(26, 16, 1613),
@@ -2883,7 +2883,7 @@ const MAPS = [
     light: 0.95,
     start: [0, 40],
     fires: [],
-    props: [
+    props: () => [
       // the platforms either side of the track
       ...scatter(1, 1701, () => [
         box(-13, 0, 12, 1, 70, 0x8d8c88),
@@ -2936,7 +2936,7 @@ const MAPS = [
     light: 1.25,
     start: [0, 34],
     fires: [],
-    props: [
+    props: () => [
       ...storefront(-22, 10, 18, 14, 1801, Math.PI / 2),
       ...storefront(22, -10, 18, 14, 1809, -Math.PI / 2),
       ...house(0, -30, 1817),
@@ -2966,7 +2966,7 @@ const MAPS = [
     light: 1.15,
     start: [0, 36],
     fires: [],
-    props: [
+    props: () => [
       ...house(-20, 8, 1901),
       ...house(18, -6, 1907),
       ...house(-6, -28, 1913),
@@ -3003,7 +3003,7 @@ const MAPS = [
     light: 1.2,
     start: [0, 42],
     fires: [],
-    props: [
+    props: () => [
       // the turbines, tall enough to steer by
       ...scatter(5, 2001, (rnd) => {
         const a = rnd() * Math.PI * 2;
@@ -3042,7 +3042,7 @@ const MAPS = [
     light: 1.05,
     start: [0, 38],
     fires: [],
-    props: [
+    props: () => [
       // containers, stacked: the corridors between them are the map
       ...scatter(46, 2101, (rnd) => {
         const a = rnd() * Math.PI * 2;
@@ -3095,7 +3095,7 @@ const MAPS = [
     light: 0.9,
     start: [0, 39],
     fires: [],
-    props: [
+    props: () => [
       ...ruinBlock(-22, 16, 2201),
       ...ruinBlock(24, -14, 2207),
       ...ruinBlock(-6, -32, 2213),
@@ -3130,7 +3130,7 @@ const MAPS = [
     light: 1,
     start: [0, 37],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(6, 2301, (rnd) => {
         const a = rnd() * Math.PI * 2;
         return house(Math.cos(a) * (24 + rnd() * 14), Math.sin(a) * (24 + rnd() * 14), 2301 + Math.floor(rnd() * 800));
@@ -3162,7 +3162,7 @@ const MAPS = [
     light: 0.85,
     start: [0, 36],
     fires: [],
-    props: [
+    props: () => [
       ...storefront(-18, 8, 20, 16, 2401, Math.PI / 2),
       ...storefront(18, -8, 20, 16, 2409, -Math.PI / 2),
       ...scatter(30, 2417, (rnd) => {
@@ -3190,7 +3190,7 @@ const MAPS = [
     light: 1,
     start: [0, 37],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(3, 2501, (rnd) => {
         const a = rnd() * Math.PI * 2;
         const d = 20 + rnd() * 16;
@@ -3237,7 +3237,7 @@ const MAPS = [
     light: 1.3,
     start: [0, 39],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(5, 2601, (rnd) => {
         const a = rnd() * Math.PI * 2;
         return house(Math.cos(a) * (24 + rnd() * 14), Math.sin(a) * (24 + rnd() * 14), 2601 + Math.floor(rnd() * 800));
@@ -3267,7 +3267,7 @@ const MAPS = [
     light: 1.1,
     start: [0, 39],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(1, 2701, () => [
         box(0, 0, 96, 9, 14, 0xb0b4b8),
         box(0, -22, 96, 0.3, 26, 0x2f6a86),
@@ -3300,7 +3300,7 @@ const MAPS = [
     light: 1.2,
     start: [0, 36],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(5, 2801, (rnd) => {
         const a = rnd() * Math.PI * 2;
         return house(Math.cos(a) * (22 + rnd() * 14), Math.sin(a) * (22 + rnd() * 14), 2801 + Math.floor(rnd() * 800));
@@ -3332,7 +3332,7 @@ const MAPS = [
     light: 0.95,
     start: [0, 35],
     fires: [],
-    props: [
+    props: () => [
       ...scatter(5, 2901, (rnd) => {
         const a = rnd() * Math.PI * 2;
         return house(Math.cos(a) * (22 + rnd() * 12), Math.sin(a) * (22 + rnd() * 12), 2901 + Math.floor(rnd() * 800));
@@ -3401,6 +3401,28 @@ function clearMap() {
 }
 
 function buildMap(def) {
+  /*
+   * Built here rather than when the module loaded.
+   *
+   * Every map used to generate its props at load: twenty-three maps, tens of
+   * thousands of objects, for a game you can only ever be in one of. On a
+   * desktop that is a slow first paint; on a phone it is the reason the tab
+   * dies before the menu appears. The maps that are not being played now cost
+   * nothing at all.
+   *
+   * It also has to happen before anything reads def.boxes or def.marks, since
+   * those are filled by the buildings as they are generated.
+   */
+  /*
+   * The boxes, the marks and the lava are filled by the buildings as they are
+   * generated, and generation now happens every time a map is built rather
+   * than once at load — so they have to be emptied first or a second visit to
+   * a map has two of everything in it.
+   */
+  for (const sink of [def.boxes, def.marks, def.lava]) {
+    if (Array.isArray(sink)) sink.length = 0;
+  }
+  const builtProps = typeof def.props === "function" ? def.props() : def.props;
   lightsUsed = 0;
   lavaPools.length = 0;
   for (const p of def.lava ?? []) lavaPools.push(p); // a fresh map gets the whole light budget back
@@ -3485,7 +3507,7 @@ function buildMap(def) {
   const vpos = new THREE.Vector3();
   const vscale = new THREE.Vector3();
 
-  for (const p of def.props) {
+  for (const p of builtProps) {
     const src = p.t === "cyl" ? UNIT_CYL : p.t === "cone" ? UNIT_CONE : UNIT_BOX;
     const rad = p.t === "cone" ? p.rad : p.rb;
     const sx = p.t === "box" ? p.w : rad;

@@ -1752,3 +1752,56 @@ button.ghost:hover {
 .streak-card .cost { color: #ffc94a; font-family: ui-monospace, monospace; font-size: 13px; }
 .streak-card .blurb { display: block; margin-top: 6px; color: #93a599; font-size: 12px; line-height: 1.5; }
 .streak-foot { display: flex; align-items: center; gap: 16px; margin-top: 24px; letter-spacing: 2px; color: #93a599; }
+
+/* ── the mode picker, made worth looking at ─────────────────────
+   Two cards, each carrying the colour of the game behind it — green for the
+   dark and the waves, blue for the daylight and the bots — so the choice
+   reads before the words are. */
+.mode-row { gap: 26px; }
+.mode-card {
+  position: relative;
+  width: 330px;
+  padding: 0 0 22px;
+  overflow: hidden;
+  border-radius: 14px;
+  transition: transform 0.14s ease-out, border-color 0.14s, box-shadow 0.14s;
+}
+.mode-card:hover, .mode-card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.mode-art {
+  display: block;
+  height: 128px;
+  margin-bottom: 18px;
+}
+.mode-card.zombies .mode-art {
+  background:
+    radial-gradient(circle at 30% 70%, rgba(95, 215, 122, 0.35), transparent 60%),
+    linear-gradient(160deg, #16311f, #0a1710 70%);
+}
+.mode-card.mp .mode-art {
+  background:
+    radial-gradient(circle at 70% 30%, rgba(90, 160, 220, 0.35), transparent 60%),
+    linear-gradient(160deg, #17293c, #0a1119 70%);
+}
+.mode-card b, .mode-desc, .mode-meta { padding: 0 22px; }
+.mode-card.zombies:hover, .mode-card.zombies:focus-visible { border-color: #5fd77a; }
+.mode-card.mp:hover, .mode-card.mp:focus-visible { border-color: #5aa0dc; }
+.mode-desc { display: block; color: #93a599; font-size: 14px; line-height: 1.55; }
+.mode-meta {
+  display: block;
+  margin-top: 14px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #6d7a72;
+}
+
+/* on a phone the two cards stack rather than running off the side */
+@media (max-width: 760px) {
+  .mode-title { font-size: 34px; letter-spacing: 6px; text-align: center; }
+  .mode-row { flex-direction: column; align-items: center; }
+  .mode-card { width: min(92vw, 380px); }
+  .mode-art { height: 96px; }
+}
