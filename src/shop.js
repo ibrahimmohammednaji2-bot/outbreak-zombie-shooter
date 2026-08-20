@@ -8,7 +8,29 @@
  */
 
 const KEY = "za:shop";
-export const DAILY_COINS = 25;
+/*
+ * The daily reward, which is a roll rather than a fixed number. Ten most days,
+ * twenty-five often enough to feel normal, fifty as a good morning — and one
+ * time in a hundred, a hundred coins, which is the whole reason to come back
+ * and look.
+ */
+export const DAILY_TIERS = [
+  { coins: 10, weight: 54 },
+  { coins: 25, weight: 30 },
+  { coins: 50, weight: 15 },
+  { coins: 100, weight: 1, jackpot: true },
+];
+export const DAILY_COINS = 25; // what it says on the button before you open it
+
+export function rollDaily() {
+  const total = DAILY_TIERS.reduce((n, t) => n + t.weight, 0);
+  let r = Math.random() * total;
+  for (const t of DAILY_TIERS) {
+    r -= t.weight;
+    if (r < 0) return t;
+  }
+  return DAILY_TIERS[0];
+}
 export const MAX_REVIVES = 3;
 
 /** Coin prices. Only the single token is buyable with coins. */
@@ -65,10 +87,10 @@ export function offerOfTheDay() {
 export const freebieReady = () => shop.lastFreebie !== today();
 
 export function claimFreebie() {
-  if (!freebieReady()) return 0;
+  if (!freebieReady()) return null;
   shop.lastFreebie = today();
   saveShop();
-  return DAILY_COINS;
+  return rollDaily();
 }
 
 export const tokenCount = () => (shop.unlimited ? Infinity : shop.tokens);

@@ -598,7 +598,9 @@ const shopOk = await page.evaluate(() => {
   return { open, paid: after - before, claimedOnce: gone };
 });
 if (!shopOk.open) note("the shop button did not open the shop");
-if (shopOk.paid !== 25) note(`daily reward paid ${shopOk.paid} coins, expected 25`);
+// it is a roll now: 10, 25, 50, or 100 one time in a hundred
+if (![10, 25, 50, 100].includes(shopOk.paid))
+  note(`daily reward paid ${shopOk.paid} coins, which is not one of the tiers`);
 if (!shopOk.claimedOnce) note("the daily reward can be claimed twice in a row");
 
 /*
@@ -1528,6 +1530,22 @@ if (!dm2.blastHurt) note("an explosion did not hurt a bot standing in it");
 if (dm2.cameBack) note("a spent streak came back without dying");
 if (dm2.afterDeath.points || dm2.afterDeath.earned)
   note(`dying left ${dm2.afterDeath.points} streak points and ${dm2.afterDeath.earned} streaks`);
+
+step("the daily reward rolls, and the jackpot is rare")
+const daily = await page.evaluate(() => {
+  const p = window.__probe;
+  const seen = {};
+  for (let i = 0; i < 20000; i++) {
+    const t = p.rollDaily();
+    seen[t.coins] = (seen[t.coins] ?? 0) + 1;
+  }
+  return seen;
+});
+const jackpotRate = (daily[100] ?? 0) / 20000;
+step(`  ${Object.entries(daily).map(([c, n]) => `${c}:${n}`).join(" ")}`);
+for (const tier of [10, 25, 50, 100]) if (!daily[tier]) note(`the ${tier} coin tier never came up`);
+if (jackpotRate > 0.02 || jackpotRate < 0.002)
+  note(`the jackpot came up ${(jackpotRate * 100).toFixed(2)}% of the time, not about 1%`);
 
 // ── the minimap ──
 step("the minimap draws zombies as dots")

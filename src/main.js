@@ -58,6 +58,7 @@ import {
   offerOfTheDay,
   freebieReady,
   claimFreebie,
+  rollDaily,
   hasToken,
   spendToken,
   grantUnlimited,
@@ -8137,7 +8138,7 @@ function renderPanel() {
 
     <div class="panel-label">MAP</div>
     <div class="opt-grid">
-      ${(game.dm ? MP_MAPS : ZOMBIE_MAPS).map(
+      ${(onMpSide ? MP_MAPS : ZOMBIE_MAPS).map(
         (m) => `<button class="opt ${m.id === game.mapId ? "on" : ""}" data-map="${m.id}">
           <span class="t">${m.name}</span><span class="d">${m.blurb}</span></button>`,
       ).join("")}
@@ -8164,7 +8165,17 @@ ui.lobbyPanel.addEventListener("click", (e) => {
     openMultiplayer();
     return;
   }
-  if (el.dataset.map) game.mapId = el.dataset.map;
+  if (el.dataset.map) {
+    game.mapId = el.dataset.map;
+    if (onMpSide) {
+      // straight back to the lobby it was opened from
+      $("lobby-panel").classList.add("hidden");
+      ui.lobby.classList.add("hidden");
+      renderMpLobby();
+      $("mplobby").classList.remove("hidden");
+      return;
+    }
+  }
   if (el.dataset.diff)
     game.diff = DIFFICULTIES.find((d) => d.id === el.dataset.diff) ?? game.diff;
 
@@ -8243,8 +8254,18 @@ addEventListener("beforeunload", () => leaveParty());
  * serve both ends up serving neither, which is what the old one was doing with
  * multiplayer hung off a button inside the zombies menu.
  */
+/*
+ * Which side of the game you are on, as opposed to whether a match is running.
+ *
+ * game.dm is only true once a free-for-all has actually started, so using it
+ * to decide which maps to offer meant the multiplayer lobby listed the zombies
+ * maps — there was no way to pick the one you wanted to play.
+ */
+let onMpSide = false;
+
 function pickMode(which) {
   $("mode-pick").classList.add("hidden");
+  onMpSide = which === "mp";
   if (which === "mp") {
     game.dm = false; // not started yet, but this is the multiplayer side
     ui.lobby.classList.add("hidden");
@@ -8655,8 +8676,9 @@ $("mplobby").addEventListener("click", (e) => {
     $("mp-status").textContent = "";
     $("mp").classList.remove("hidden");
   } else if (what === "setup") {
-    // the map picker the zombies side already uses
+    // the same picker the zombies side uses, showing the multiplayer maps
     $("mplobby").classList.add("hidden");
+    ui.lobby.classList.remove("hidden");
     panelKind = "map";
     renderPanel();
     $("lobby-panel").classList.remove("hidden");
@@ -9608,7 +9630,7 @@ function renderShop() {
     <div class="freebie ${freebieReady() ? "" : "taken"}">
       <span>${
         freebieReady()
-          ? `Your daily reward is waiting — ${DAILY_COINS} coins.`
+          ? "Your daily reward is waiting — 10, 25 or 50 coins, and one time in a hundred, 100."
           : "Daily reward already claimed. Come back tomorrow."
       }</span>
       ${freebieReady() ? `<button data-shop="freebie">CLAIM</button>` : ""}
@@ -9651,9 +9673,15 @@ $("shop-body").addEventListener("click", (e) => {
   if (what === "freebie") {
     const got = claimFreebie();
     if (got) {
-      earnCoins(got);
+      earnCoins(got.coins);
       sfx.unlock();
-      toast(`+${got} COINS`);
+      // the hundred is one roll in a hundred, and should feel like it
+      if (got.jackpot) {
+        banner("JACKPOT", 2600);
+        toast(`+${got.coins} COINS — ONE IN A HUNDRED`);
+      } else {
+        toast(`+${got.coins} COINS`);
+      }
     }
   }
 
@@ -9809,6 +9837,8 @@ if (import.meta.env.DEV) {
     streaks,
     SCORESTREAKS,
     chosenStreaks,
+    rollDaily,
+    onMpSideRef: () => onMpSide,
     toggleStreak,
     STREAK_SLOTS,
     useStreak,
