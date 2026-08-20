@@ -1547,6 +1547,32 @@ for (const tier of [10, 25, 50, 100]) if (!daily[tier]) note(`the ${tier} coin t
 if (jackpotRate > 0.02 || jackpotRate < 0.002)
   note(`the jackpot came up ${(jackpotRate * 100).toFixed(2)}% of the time, not about 1%`);
 
+/*
+ * The day's offer. Percentage cuts must actually come off the price and must
+ * never round it up, and half price has to stay rare.
+ */
+step("today's offer is one of the deals, and a cut really cuts")
+const offer = await page.evaluate(() => {
+  const p = window.__probe;
+  const o = p.offerOfTheDay();
+  const pack = p.TOKEN_PACKS.find((x) => x.aed === 150);
+  const out = { kind: o.kind, name: o.name, was: pack.aed, now: p.priceOf(pack) };
+  out.ladder = {
+    op: p.bogoReward("op"),
+    special: p.bogoReward("special"),
+    legendary: p.bogoReward("legendary"),
+  };
+  return out;
+});
+step(`  ${offer.name} — 150 AED becomes ${offer.now}`);
+if (!["cut", "named", "bogo"].includes(offer.kind)) note(`unknown offer kind ${offer.kind}`);
+if (offer.kind === "cut" && offer.now >= offer.was)
+  note(`a discount left the price at ${offer.now}, up from ${offer.was}`);
+if (offer.kind !== "cut" && offer.now !== offer.was)
+  note("a non-discount offer changed the price anyway");
+if (offer.ladder.op !== "special" || offer.ladder.special !== "legendary")
+  note("the buy-one-get-one ladder does not step down a rarity");
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {

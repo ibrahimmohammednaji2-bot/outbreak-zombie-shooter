@@ -58,6 +58,8 @@ import {
   offerOfTheDay,
   freebieReady,
   claimFreebie,
+  namedDealIndex,
+  bogoReward,
   rollDaily,
   hasToken,
   spendToken,
@@ -5618,6 +5620,9 @@ function clearSpot(angle, from = HALF * 0.5, min = 6) {
   for (let r = from; r > min; r -= 2.5) {
     const x = Math.cos(angle) * r;
     const z = Math.sin(angle) * r;
+    // never on the road: a machine there is something the bus drives through,
+    // and these are placed at random, so it would only happen some games
+    if (mapDef?.route && onRoute(x, z, 13)) continue;
     if (spotIsClear(x, z, 1.6)) return [x, z];
   }
   // nothing clear on this spoke — sweep round at the minimum instead
@@ -9700,6 +9705,23 @@ function renderShopButton() {
     : `${shop.unlimited ? "∞" : shop.tokens} token${shop.tokens === 1 && !shop.unlimited ? "" : "s"}`;
 }
 
+/*
+ * What today's deal actually says. A named deal has to name the skin and its
+ * price; a buy-one-get-one has to say what comes with what, or nobody can tell
+ * whether it is worth taking.
+ */
+function offerLine(offer) {
+  if (offer.kind === "named") {
+    const skin = SKINS[namedDealIndex(SKINS.length)];
+    const r = rarityOf(skin.rarity);
+    return `${skin.name} — ${r.cost} ${r.currency === "aed" ? "AED" : "coins"}, today only.`;
+  }
+  if (offer.kind === "bogo") {
+    return "Buy a skin and one a rung below comes with it — an OP brings a Special, a Special brings a Legendary, and so on down.";
+  }
+  return offer.detail;
+}
+
 function renderShop() {
   const offer = offerOfTheDay();
   $("shop-coins").textContent = wallet.coins;
@@ -9709,7 +9731,7 @@ function renderShop() {
     <div class="offer">
       <div class="tag">TODAY ONLY</div>
       <div class="name">${offer.name}</div>
-      <div class="detail">${offer.detail}${offer.aed ? ` — ${offer.aed} AED` : ""}</div>
+      <div class="detail">${offerLine(offer)}</div>
     </div>
 
     <div class="freebie ${freebieReady() ? "" : "taken"}">
@@ -9725,7 +9747,7 @@ function renderShop() {
     <div class="pack-grid">
       ${TOKEN_PACKS.map((p) => {
         const price = priceOf(p);
-        const cut = offer.half && p.aed !== price;
+        const cut = p.aed !== price;
         const label = p.tokens === Infinity ? "Unlimited" : `${p.tokens} token${p.tokens > 1 ? "s" : ""}`;
         return `
           <button class="pack ${p.tokens === Infinity ? "unlimited" : ""}" data-shop="pack:${p.id}">
@@ -9923,6 +9945,10 @@ if (import.meta.env.DEV) {
     SCORESTREAKS,
     chosenStreaks,
     rollDaily,
+    offerOfTheDay,
+    priceOf,
+    bogoReward,
+    TOKEN_PACKS,
     onMpSideRef: () => onMpSide,
     toggleStreak,
     STREAK_SLOTS,

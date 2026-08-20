@@ -45,11 +45,39 @@ export const TOKEN_PACKS = [
 ];
 
 /** What rotates. One is chosen per day from the date itself. */
+/*
+ * What is on today. One is picked from the date, so everybody sees the same
+ * thing and it changes at midnight without anybody having to run anything.
+ *
+ * Three shapes of deal:
+ *   cut       a percentage off everything — usually ten, sometimes twenty-five,
+ *             rarely half
+ *   named     one particular skin at one particular price
+ *   bogo      buy one and something a rung down the ladder comes with it
+ *
+ * The rarity ladder for bogo: an OP brings a Special, a Special brings a
+ * Legendary, and so on down. Nothing brings something of its own rank, so a
+ * deal can never pay for itself.
+ */
+const BOGO_LADDER = {
+  op: "special",
+  special: "legendary",
+  legendary: "epic",
+  epic: "rare",
+  rare: "uncommon",
+  uncommon: "common",
+};
+
 const OFFERS = [
-  { id: "op-skin", name: "An OP skin", detail: "Any OP rarity skin", aed: 10 },
-  { id: "special-skin", name: "A Special skin", detail: "Any Special rarity skin", aed: 5 },
-  { id: "tokens-half", name: "Tokens at half price", detail: "Every pack, half off, today only", half: true },
+  { id: "cut10", kind: "cut", pct: 10, weight: 46, name: "10% off", detail: "Everything in the shop, today only." },
+  { id: "cut25", kind: "cut", pct: 25, weight: 30, name: "25% off", detail: "Everything in the shop, today only." },
+  { id: "cut50", kind: "cut", pct: 50, weight: 6, name: "Half price", detail: "Everything in the shop. This does not come round often." },
+  { id: "named", kind: "named", weight: 10, name: "One skin, one price", detail: "Today's skin, and only today's." },
+  { id: "bogo", kind: "bogo", weight: 8, name: "Buy one, get one", detail: "Buy a skin and one a rung below it comes with it." },
 ];
+
+/** The rarity a bogo deal pays out for a given purchase. */
+export const bogoReward = (rarityId) => BOGO_LADDER[rarityId] ?? null;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -77,11 +105,30 @@ export function saveShop() {
 }
 
 /** A stable pick for the day, so everyone sees the same offer. */
+/*
+ * The day's offer, weighted — a straight modulo over the list would make half
+ * price as common as ten percent off, and half price is meant to be a day you
+ * remember.
+ */
 export function offerOfTheDay() {
   const d = today();
   let sum = 0;
-  for (let i = 0; i < d.length; i++) sum += d.charCodeAt(i);
-  return OFFERS[sum % OFFERS.length];
+  for (let i = 0; i < d.length; i++) sum += d.charCodeAt(i) * (i + 7);
+  const total = OFFERS.reduce((n, o) => n + o.weight, 0);
+  let r = sum % total;
+  for (const o of OFFERS) {
+    r -= o.weight;
+    if (r < 0) return o;
+  }
+  return OFFERS[0];
+}
+
+/** Which skin today's named deal is on, chosen the same stable way. */
+export function namedDealIndex(count) {
+  const d = today();
+  let sum = 0;
+  for (let i = 0; i < d.length; i++) sum += d.charCodeAt(i) * (i + 3);
+  return sum % Math.max(1, count);
 }
 
 export const freebieReady = () => shop.lastFreebie !== today();
@@ -123,7 +170,9 @@ export function revokeUnlimited() {
 /** Price after today's offer is taken into account. */
 export function priceOf(pack) {
   const offer = offerOfTheDay();
-  return offer.half ? Math.round(pack.aed / 2) : pack.aed;
+  if (offer.kind !== "cut") return pack.aed;
+  // never round a price up: a discount that costs more is not a discount
+  return Math.max(1, Math.floor(pack.aed * (1 - offer.pct / 100)));
 }
 
 /** Returns "ok", "poor" or "real-money". */
