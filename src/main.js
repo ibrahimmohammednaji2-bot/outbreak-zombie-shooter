@@ -5278,7 +5278,7 @@ $("streak-pick").addEventListener("click", (e) => {
   if (card) toggleStreak(card.dataset.streak);
 });
 
-const streaks = { points: 0, earned: [], uavUntil: 0, jamUntil: 0, hunters: [], guardians: [], runsLeft: 0, runAt: 0 };
+const streaks = { points: 0, earned: [], used: [], uavUntil: 0, jamUntil: 0, hunters: [], guardians: [], runsLeft: 0, runAt: 0 };
 const uavUp = () => game.time < streaks.uavUntil;
 const sentries = [];
 
@@ -5287,6 +5287,7 @@ function awardStreakPoints(n) {
   streaks.points += n;
   for (const st of SCORESTREAKS) {
     if (!chosenStreaks.includes(st.id)) continue; // you did not bring this one
+    if (streaks.used.includes(st.id)) continue; // spent, and staying spent until you die
     if (streaks.points >= st.cost && !streaks.earned.includes(st.id)) {
       streaks.earned.push(st.id);
       toast(`${st.name.toUpperCase()} READY — G`);
@@ -5315,6 +5316,7 @@ function useStreak() {
   if (!game.dm || !streaks.earned.length) return;
   const id = streaks.earned.shift();
   const st = streakById(id);
+  streaks.used.push(id); // one each per life, as a streak should be
 
   if (id === "uav") {
     streaks.uavUntil = game.time + 30;
@@ -5487,7 +5489,7 @@ function updateSentries(dt) {
   for (let i = sentries.length - 1; i >= 0; i--) {
     const s = sentries[i];
     let best = null;
-    let bestD = 34;
+    let bestD = 20; // a doorway, not a street
     for (const b of bots) {
       if (!b.alive) continue;
       const d = b.group.position.distanceTo(s.group.position);
@@ -6131,6 +6133,19 @@ function explode(pos, radius, dmg) {
 
   spatter(pos, new THREE.Vector3(0, 1, 0), 18, dirtMat);
   sfx.explosion?.(pos.distanceTo(player.pos));
+
+  /*
+   * Everything in the blast, on both sides. Bots were missed out entirely, so
+   * a rocket, a grenade launcher, a ray gun, a thrown grenade and a Warthog
+   * run all went straight through them — every explosive in the game did
+   * nothing in a free-for-all.
+   */
+  for (const b of bots) {
+    if (!b.alive) continue;
+    const d = b.group.position.distanceTo(pos);
+    if (d > radius) continue;
+    damageBot(b, dmg * (1 - d / radius), false, new THREE.Vector3(0, 1, 0), b.group.position);
+  }
 
   for (const z of zombies) {
     if (z.dying > 0) continue;
@@ -8344,6 +8359,16 @@ function endGame() {
     h1.className = "red";
   }
   if (game.dm) {
+    /*
+     * Dying costs you the meter and everything on it. Without this a streak is
+     * just a list of things you eventually own — you were being handed all
+     * three back on the next kill because the total never came down.
+     */
+    streaks.points = 0;
+    streaks.earned.length = 0;
+    streaks.used.length = 0;
+    renderStreakHud();
+
     // eliminated, not finished
     player.alive = false;
     player.respawn = DM_RESPAWN;
@@ -9033,6 +9058,7 @@ function startDeathmatch() {
   game.score = 0;
   streaks.points = 0;
   streaks.earned.length = 0;
+  streaks.used.length = 0;
   streaks.uavUntil = 0;
   streaks.jamUntil = 0;
   streaks.runsLeft = 0;
@@ -9767,6 +9793,8 @@ if (import.meta.env.DEV) {
     awardStreakPoints,
     uavUp,
     sentries,
+    explode,
+    bots,
     mapById,
     WEAPONS,
     aim,

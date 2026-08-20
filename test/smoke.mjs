@@ -1492,6 +1492,43 @@ if (picked.overfilled) note("more than three streaks could be taken at once");
 if (picked.earned.length !== 1 || picked.earned[0] !== "uav")
   note(`five thousand points earned ${picked.earned.join(", ")} from a single chosen streak`);
 
+/*
+ * Two things that were plainly wrong in a free-for-all: nothing explosive
+ * touched a bot, and a streak came back on the next kill because dying never
+ * cost you the meter.
+ */
+step("explosions hurt bots, and dying costs you the streak meter")
+const dm2 = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "nuketown";
+  p.startDeathmatch();
+  const out = {};
+
+  const bot = p.bots.find((b) => b.alive);
+  const before = bot.hp;
+  p.explode(bot.group.position.clone(), 8, 400);
+  out.blastHurt = bot.hp < before;
+
+  // earn one, spend it, and it must not come back on the next kill
+  p.chosenStreaks.length = 0;
+  p.chosenStreaks.push("uav");
+  p.awardStreakPoints(500);
+  p.useStreak();
+  p.awardStreakPoints(500);
+  out.cameBack = p.streaks.earned.includes("uav");
+
+  // dying clears the meter entirely
+  p.player.alive = true;
+  p.endGame();
+  out.afterDeath = { points: p.streaks.points, earned: p.streaks.earned.length };
+  p.toLobby();
+  return out;
+});
+if (!dm2.blastHurt) note("an explosion did not hurt a bot standing in it");
+if (dm2.cameBack) note("a spent streak came back without dying");
+if (dm2.afterDeath.points || dm2.afterDeath.earned)
+  note(`dying left ${dm2.afterDeath.points} streak points and ${dm2.afterDeath.earned} streaks`);
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {
