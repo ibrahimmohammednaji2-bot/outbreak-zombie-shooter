@@ -100,6 +100,25 @@ const BOX_COST = 950;
 // the mystery box upstairs.
 const WEAPONS = [
   {
+    // What you start a night with. Deliberately unremarkable: it is the thing
+    // you are trying to stop using by wave four.
+    id: "pistol",
+    name: "Pistol",
+    damage: 34,
+    headMult: 3,
+    rpm: 0.26,
+    mag: 12,
+    reserve: 90,
+    pellets: 1,
+    spread: 0.008,
+    auto: false,
+    reload: 1.1,
+    recoil: 0.055,
+    pickup: 6,
+    volume: 0.5,
+    tone: 780,
+  },
+  {
     // Damage is worked out at the moment it lands: always exactly enough
     // that wave N takes N hits.
     id: "knife",
@@ -814,12 +833,16 @@ const BOX_POOL = [
 ];
 
 /** Two pistols and a knife — the same three every run starts with. */
+/*
+ * Two pistols and no third slot. The knife used to sit in one, which meant a
+ * third of your loadout was a weapon you switched to by accident and never on
+ * purpose. It is on Q now — always there, never in the way.
+ */
 function startingSlots() {
-  const p = weaponById("fiveseven");
+  const p = weaponById("pistol");
   return [
-    { id: "fiveseven", mag: p.mag, reserve: p.reserve },
-    { id: "fiveseven", mag: p.mag, reserve: p.reserve },
-    { id: "knife", mag: 0, reserve: 0 },
+    { id: "pistol", mag: p.mag, reserve: p.reserve },
+    { id: "pistol", mag: p.mag, reserve: p.reserve },
   ];
 }
 
@@ -1070,6 +1093,16 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1018);
 scene.fog = new THREE.FogExp2(0x0a1018, 0.021);
+
+/*
+ * Which way you are looking at yourself. C cycles them.
+ */
+const VIEWS = [
+  { name: "First person", dist: 0, lift: 0 },
+  { name: "Third person", dist: 4.2, lift: 0.5 },
+  { name: "Third person, front", dist: 3.4, lift: 0.4 },
+];
+const view = { mode: 0 };
 
 const HIP_FOV = 76;
 const camera = new THREE.PerspectiveCamera(
@@ -6411,7 +6444,8 @@ function grantFromBox() {
  * on the second, and so on. Killing with it pays far better than shooting.
  */
 function swing(w) {
-  game.cooldown = w.rpm;
+  // a knife on Q must not stop you shooting; a knife in hand still does
+  if (curWeapon().melee) game.cooldown = w.rpm;
   game.recoil = w.recoil;
   sfx.shot(w);
 
@@ -6867,11 +6901,44 @@ function movePlayer(dt) {
   const targetEye = crouching ? CROUCH_EYE : EYE;
   eyeHeight += (targetEye - eyeHeight) * Math.min(1, dt * 11);
 
-  camera.position.set(
+  /*
+   * Three ways of looking at yourself. First person is the eye; the other two
+   * pull the camera back along the way you are facing — behind you, or in
+   * front and turned round.
+   *
+   * Pulling back is done by hand rather than by moving the rig, because the
+   * aim, the viewmodel and the shot all read the camera's direction, and every
+   * one of them still works if only its position moves.
+   */
+  const eyeAt = new THREE.Vector3(
     player.pos.x,
     player.pos.y + eyeHeight + bobAmount,
     player.pos.z,
   );
+  camera.position.copy(eyeAt);
+
+  if (view.mode !== 0) {
+    camera.getWorldDirection(camDir);
+    const back = view.mode === 1 ? -1 : 1; // behind you, or out in front
+    const pull = VIEWS[view.mode].dist;
+    const want = eyeAt.clone().addScaledVector(camDir, back * pull);
+    want.y += VIEWS[view.mode].lift;
+
+    // do not put the camera inside a wall to show you your own back
+    const clear = pushOutCopy(want, 0.5, player.pos.y);
+    camera.position.copy(clear);
+    if (view.mode === 2) camera.lookAt(eyeAt);
+  }
+  // whichever way you are looking, the gun in your hands is only drawn in first
+  const heldVm = viewmodels[curSlot()?.id];
+  if (heldVm) heldVm.visible = view.mode === 0;
+}
+
+/** pushOut, but on a copy — the real one moves what you hand it. */
+function pushOutCopy(pos, radius, feetY) {
+  const p = pos.clone();
+  pushOut(p, radius, feetY);
+  return p;
 }
 
 // ── zombie ai ────────────────────────────────────────────────────
@@ -7315,6 +7382,7 @@ function animate() {
 
     // weapon timers
     game.cooldown = Math.max(0, game.cooldown - dt);
+  game.knifeCd = Math.max(0, (game.knifeCd ?? 0) - dt);
     if (game.reloadTimer > 0) {
       game.reloadTimer -= dt;
       if (game.reloadTimer <= 0) {
@@ -7486,8 +7554,24 @@ addEventListener("keydown", (e) => {
   if (e.code === "Digit3") switchWeapon(2);
   if (e.code === "KeyE") activatePower();
   if (e.code === "KeyF") useBox();
+  /*
+   * Q knifes with whatever you are holding. The knife is not something you
+   * carry any more, it is something you do — so it has its own cooldown and
+   * does not put the gun in your hands on one.
+   */
+  if (e.code === "KeyQ" && (game.knifeCd ?? 0) <= 0) {
+    game.knifeCd = 0.55;
+    swing(weaponById("knife"));
+  }
   // the bank is the one thing with two answers, so it gets two keys
-  if (e.code === "KeyC" && nearThing?.kind === "bank") useBank(true);
+  if (e.code === "KeyC") {
+    // at the bank C takes money out; anywhere else it changes the view
+    if (nearThing?.kind === "bank") useBank(true);
+    else {
+      view.mode = (view.mode + 1) % VIEWS.length;
+      toast(VIEWS[view.mode].name.toUpperCase());
+    }
+  }
   if (e.code === "KeyG") useStreak();
   if (e.code === "KeyZ") throwEquipment(true);
   if (e.code === "KeyX") throwEquipment(false);
@@ -8386,8 +8470,9 @@ function resetGame() {
     reloadTimer: 0,
     recoil: 0,
     triggerHeld: false,
+    knifeCd: 0,
   });
-  viewmodels.fiveseven.visible = true;
+  viewmodels.pistol.visible = true;
 
   renderLoadout();
   resetPower();
