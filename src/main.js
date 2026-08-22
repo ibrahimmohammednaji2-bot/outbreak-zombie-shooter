@@ -6563,6 +6563,17 @@ function updatePowerHud() {
 
 function activatePower() {
   if (!game.running || game.over) return;
+  /*
+   * Skin powers are a zombies thing. In a free-for-all they would decide the
+   * fight rather than the shooting — one player turning invisible or taking no
+   * damage for eight seconds is not something the other side can answer, and
+   * the skins are bought with coins, so it would be paying to win.
+   */
+  if (game.dm) {
+    toast("NO POWERS IN MULTIPLAYER");
+    sfx.dryFire();
+    return;
+  }
 
   const p = skinById(wallet.equipped).power;
   if (!p) {
@@ -8417,6 +8428,8 @@ function setHudForMode() {
   for (const id of ["points-label", "wave-label", "remaining-label"]) {
     $(id)?.classList.toggle("hidden", game.dm);
   }
+  // and the power button, since powers are a zombies thing
+  if (game.dm) $("power-btn")?.classList.add("hidden");
 }
 
 function beginPlay() {
@@ -9969,6 +9982,7 @@ if (import.meta.env.DEV) {
     START_POINTS,
     fire,
     activatePower,
+    power,
     startDeathmatch,
     toLobby,
     openMultiplayer,

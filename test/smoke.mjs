@@ -1573,6 +1573,22 @@ if (offer.kind !== "cut" && offer.now !== offer.was)
 if (offer.ladder.op !== "special" || offer.ladder.special !== "legendary")
   note("the buy-one-get-one ladder does not step down a rarity");
 
+step("skin powers do not work in multiplayer")
+const noPowers = await page.evaluate(async () => {
+  const p = window.__probe;
+  p.game.mapId = "nuketown";
+  p.startDeathmatch();
+  p.activatePower();
+  const out = {
+    anyRunning: Object.keys(p.power.live ?? {}).length > 0,
+    buttonShown: !document.getElementById("power-btn").classList.contains("hidden"),
+  };
+  p.toLobby();
+  return out;
+});
+if (noPowers.anyRunning) note("a skin power ran in a free-for-all");
+if (noPowers.buttonShown) note("the power button is showing in a free-for-all");
+
 // ── the minimap ──
 step("the minimap draws zombies as dots")
 const mini = await page.evaluate(async () => {
