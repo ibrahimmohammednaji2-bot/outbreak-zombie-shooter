@@ -1805,3 +1805,19 @@ button.ghost:hover {
   .mode-card { width: min(92vw, 380px); }
   .mode-art { height: 96px; }
 }
+
+/* back to the mode picker: the only way between the two games now */
+#lobby-back {
+  position: absolute;
+  left: 34px;
+  bottom: 30px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #c8d2d8;
+  padding: 9px 20px;
+  font: inherit;
+  letter-spacing: 3px;
+  cursor: pointer;
+  z-index: 2;
+}
+#lobby-back:hover { border-color: var(--accent); color: #fff; }

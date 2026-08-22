@@ -8228,14 +8228,6 @@ function renderPanel() {
   }
 
   ui.lobbyPanel.innerHTML = `
-    <div class="panel-label">MODE</div>
-    <div class="opt-grid">
-      <button class="opt on"><span class="t">ZOMBIES</span>
-        <span class="d">Survive endless waves.</span></button>
-      <button class="opt" data-openmp="1"><span class="t">MULTIPLAYER</span>
-        <span class="d">Free-for-all. Build a class, fight bots or real players.</span></button>
-    </div>
-
     <div class="panel-label">MAP</div>
     <div class="opt-grid">
       ${(onMpSide ? MP_MAPS : ZOMBIE_MAPS).map(
@@ -8259,12 +8251,6 @@ ui.lobbyPanel.addEventListener("click", (e) => {
   const el = e.target.closest("button");
   if (!el || el.disabled) return;
 
-  if (el.dataset.openmp) {
-    panelKind = null;
-    renderPanel();
-    openMultiplayer();
-    return;
-  }
   if (el.dataset.map) {
     game.mapId = el.dataset.map;
     if (onMpSide) {
@@ -8391,6 +8377,8 @@ $("mode-pick").addEventListener("click", (e) => {
 
 function toLobby() {
   inLobby = true;
+  // the two sides do not lead to each other; only the picker does
+  $("mode-pick")?.classList.add("hidden");
   if (game.dm) { clearBots(); game.dm = false; }
   ui.scoreboard.classList.add("hidden");
   ui.respawning.classList.add("hidden");
@@ -8454,9 +8442,20 @@ function resetGame() {
   player.maxHp = 100;
   for (let i = zombies.length - 1; i >= 0; i--) removeZombie(zombies[i], i);
   buildMap(mapById(game.mapId));
+  /*
+   * Stand on the map, not in it.
+   *
+   * The start point is an x and a z, and y was always zero — fine on a map
+   * whose ground is the ground, wrong on one with a raised floor. On Hijacked
+   * the deck is a solid slab a unit thick, so spawning at zero put you inside
+   * it: the push-out shoved you every frame, which reads as not being able to
+   * move, and being inside the floor is also why you could see and shoot
+   * through everything. Crouching only pushed you further in.
+   */
   const [sx, sz] = mapDef.start;
   player.pos.set(sx, 0, sz);
   pushOut(player.pos, PLAYER_R); // never start inside a prop
+  player.pos.y = groundHeightAt(player.pos, PLAYER_R, 40);
   player.vel.set(0, 0, 0);
   player.vy = 0;
   player.hp = 100;
@@ -8797,6 +8796,7 @@ $("mplobby").addEventListener("click", (e) => {
 });
 
 $("mpl-back").addEventListener("click", showModePick);
+$("lobby-back").addEventListener("click", showModePick);
 
 $("mp-back").addEventListener("click", () => {
   // back out of the class screen into the lobby it was opened from
@@ -8977,6 +8977,9 @@ function spawnBot(i) {
   placeBot(bot);
   return bot;
 }
+
+/** Whatever is underfoot here, from above, so a raised floor counts. */
+const standOn = (pos) => groundHeightAt(pos, PLAYER_R, 40);
 
 function placeBot(bot) {
   const ring = HALF * 0.72;
@@ -9167,6 +9170,7 @@ function respawnPlayer() {
   const a = Math.random() * Math.PI * 2;
   player.pos.set(Math.cos(a) * ring, 0, Math.sin(a) * ring);
   pushOut(player.pos, PLAYER_R);
+  player.pos.y = standOn(player.pos); // on the floor, not in it
   player.vel.set(0, 0, 0);
   player.vy = 0;
   player.hp = 100;
